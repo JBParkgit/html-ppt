@@ -1,0 +1,18 @@
+{
+  "title": "Lumen — AI 회의록 비서",
+  "aspect": "16:9",
+  "theme": "gold",
+  "palette": { "bg": "#0f1b2d", "title": "#f8f1e5", "text": "#c9d1dc", "accent": "#d4a24c", "accent2": "#5b8def" },
+  "transition": "fade",
+  "slides": [
+    { "layout": "title", "title": "Lumen", "subtitle": "회의가 끝나면, 할 일이 정리되어 있습니다", "fx": { "type": "aurora", "color": "#d4a24c", "color2": "#5b8def" }, "notes": "30초 안에 문제와 해결을 한 문장으로 소개합니다." },
+    { "layout": "big-number", "number": "31%", "title": "회의 시간 중 정리·공유에 쓰는 비율", "caption": "직장인 설문 (예시 수치)", "transition": "zoom-in" },
+    { "layout": "two-column", "title": "문제와 해결", "leftTitle": "지금", "left": ["회의록 작성에 평균 25분", "결정 사항 누락", "담당자 불명확"], "rightTitle": "Lumen", "right": ["실시간 자동 기록", "결정·할 일 자동 추출", "담당자 알림까지 한 번에"] },
+    { "layout": "stats", "title": "시장 기회", "bullets": ["4.2조: 국내 협업툴 시장", "18%: 연평균 성장률", "320만: 목표 사용자"], "transition": "push-up" },
+    { "layout": "cards", "title": "비즈니스 모델", "bullets": ["💳 구독: 팀당 월 9,900원", "🏢 엔터프라이즈: 보안·온프레미스", "🔌 API: 회의 데이터 연동"] },
+    { "layout": "chart", "title": "월간 활성 팀 (예시)", "chartType": "area", "chartData": [["월", "활성 팀"], ["1월", 120], ["2월", 210], ["3월", 380], ["4월", 620], ["5월", 940], ["6월", 1480]], "caption": "베타 6개월 — 월 평균 59% 성장" },
+    { "layout": "timeline", "title": "로드맵", "bullets": ["2026 Q4: 정식 출시", "2027 Q1: 다국어", "2027 Q3: 엔터프라이즈", "2028: 글로벌"] },
+    { "layout": "big-number", "number": "30억", "title": "시드 투자 요청", "caption": "18개월 런웨이 · 제품 고도화 60% · 영업 40%", "fx": "particles" },
+    { "layout": "closing", "title": "감사합니다", "subtitle": "hello@lumen.example", "transition": "circle" }
+  ]
+}

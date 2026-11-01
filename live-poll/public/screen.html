@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>실시간 투표 화면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Nanum+Myeongjo:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --bg:#0f1b2d; --bg2:#1d2a40; --card:rgba(255,255,255,.055); --line:rgba(255,255,255,.13); --text:#e6ebf2; --title:#f8f1e5; --dim:#97a3b5; --gold:#d4a24c; --rose:#eba89d; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; }
+  body { background:linear-gradient(160deg,var(--bg) 0%,#16243b 60%,var(--bg2) 100%); color:var(--text); font-family:'Noto Sans KR',sans-serif; }
+  /* 1920×1080 기준으로 그리고 창 크기에 맞춰 축소/확대 */
+  #stage { position:absolute; left:50%; top:50%; width:1920px; height:1080px; transform-origin:50% 50%; }
+  .pill { position:absolute; left:100px; top:56px; background:var(--gold); color:var(--bg); font-weight:900; font-size:26px; padding:8px 26px; border-radius:99px; }
+  .count { position:absolute; right:100px; top:56px; font-size:28px; color:var(--dim); }
+  .count b { color:var(--title); font-size:40px; }
+  .qr { position:absolute; left:100px; bottom:70px; width:360px; background:#fff; border-radius:24px; padding:22px; text-align:center; color:#0f1b2d; box-shadow:0 10px 40px rgba(0,0,0,.35); }
+  .qr #qr img, .qr #qr canvas { width:316px !important; height:316px !important; display:block; }
+  .qr .cap { font-size:22px; font-weight:900; margin-top:12px; }
+  .qr .url { font-size:17px; color:#475569; margin-top:4px; word-break:break-all; }
+  .main { position:absolute; left:540px; right:100px; top:150px; bottom:70px; display:flex; flex-direction:column; }
+  .qno { font-size:30px; color:var(--gold); font-weight:700; }
+  h1 { font-family:'Nanum Myeongjo',serif; font-size:64px; line-height:1.3; color:var(--title); margin:14px 0 40px; word-break:keep-all; }
+  .bars { display:flex; flex-direction:column; gap:22px; flex:1; justify-content:center; }
+  .bar { position:relative; height:104px; border-radius:20px; background:var(--card); border:2px solid var(--line); overflow:hidden; }
+  .bar .fill { position:absolute; inset:0 auto 0 0; width:0; background:linear-gradient(90deg,rgba(212,162,76,.55),rgba(212,162,76,.85)); transition:width .9s cubic-bezier(.2,.8,.2,1); }
+  .bar.top .fill { background:linear-gradient(90deg,rgba(235,168,157,.7),rgba(235,168,157,.95)); }
+  .bar .lab { position:absolute; left:30px; top:0; bottom:0; display:flex; align-items:center; gap:20px; font-size:38px; font-weight:700; color:var(--title); }
+  .bar .lab .n { width:56px; height:56px; border-radius:50%; background:rgba(15,27,45,.55); display:grid; place-items:center; font-size:28px; }
+  .bar .pct { position:absolute; right:30px; top:0; bottom:0; display:flex; align-items:center; gap:16px; font-size:44px; font-weight:900; color:var(--title); }
+  .bar .pct small { font-size:26px; font-weight:400; color:var(--dim); }
+  .closed { display:inline-block; margin-left:18px; font-size:24px; color:var(--rose); border:2px solid var(--rose); border-radius:99px; padding:2px 16px; vertical-align:middle; }
+  /* 대기 화면 */
+  .intro { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:120px; }
+  .intro .qr { position:static; width:520px; padding:30px; }
+  .intro .qr #qr img, .intro .qr #qr canvas { width:460px !important; height:460px !important; }
+  .intro .qr .cap { font-size:30px; }
+  .intro .txt h1 { font-size:84px; margin:0 0 30px; }
+  .intro .txt p { font-size:36px; line-height:1.7; color:var(--text); margin:0; }
+  .intro .txt .lock { color:var(--gold); font-weight:700; }
+  /* 진행자 조작 (주소에 ?key=… 가 있을 때만) */
+  #ctrl { position:fixed; left:50%; top:12px; transform:translateX(-50%); display:none; gap:6px; background:rgba(0,0,0,.55); padding:8px; border-radius:12px; opacity:.35; transition:opacity .2s; font-size:14px; white-space:nowrap; }
+  #ctrl:hover { opacity:1; }
+  #ctrl button { background:#24324a; color:#fff; border:1px solid #3b4b66; border-radius:8px; padding:7px 12px; font:inherit; cursor:pointer; }
+  #ctrl button:hover { background:var(--gold); color:#0f1b2d; }
+  #ctrl button.go { background:var(--gold); color:#0f1b2d; font-weight:900; padding:7px 18px; }
+  #ctrl .msg { color:#ffb4a8; align-self:center; padding:0 6px; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="ctrl">
+  <button data-a="step" class="go" id="step">▶ 투표 시작</button><button data-a="prev">◀ 이전</button><button data-a="open">열기</button><button data-a="close">⏸ 마감</button><button data-a="next">다음 ▶</button><button data-a="end">대기 화면</button><button data-a="reset">전체 초기화</button><span class="msg" id="msg"></span>
+</div>
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const params = new URLSearchParams(location.search);
+  const KEY = params.get('key') || '';
+  const voteUrl = params.get('vote') || location.origin + '/';
+  const shortUrl = voteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let st = null, layoutKey = '';
+
+  function fit() { const k = Math.min(innerWidth / 1920, innerHeight / 1080); stage.style.transform = `translate(-50%,-50%) scale(${k})`; }
+  addEventListener('resize', fit); fit();
+
+  function qrBox(cap) {
+    return `<div class="qr"><div id="qr"></div><div class="cap">${cap}</div><div class="url">${esc(shortUrl)}</div></div>`;
+  }
+  function drawQR() {
+    const el = document.getElementById('qr');
+    if (!el || typeof QRCode === 'undefined') return;
+    el.innerHTML = '';
+    new QRCode(el, { text: voteUrl, width: 512, height: 512, colorDark: '#0f1b2d', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  function render() {
+    fit(); // 슬라이드 안에서는 처음 불러올 때 크기가 0일 수 있어 매번 맞춘다
+    if (!st) return;
+    const q = st.question;
+    const lk = q ? 'q' + st.session + st.current : 'intro';
+    if (lk !== layoutKey) {
+      layoutKey = lk;
+      if (!q) {
+        stage.innerHTML = `<div class="intro">${qrBox('📱 카메라로 찍어 참여하세요')}<div class="txt"><h1>우리 교회<br>부부 실태 조사 🗳️</h1><p>스마트폰 카메라로 QR 코드를 찍거나<br>단톡방 링크를 눌러 주세요.<br><span class="lock">🔒 무기명 투표 · 이름은 저장되지 않습니다</span></p></div></div>`;
+      } else {
+        stage.innerHTML = `<div class="pill">우리 교회 부부 실태 조사</div><div class="count">참여 <b id="tot">0</b>명</div>
+          <div class="main"><div class="qno">Q${st.current + 1} / ${st.total} <span class="closed" id="closed" style="display:none">투표 마감</span></div>
+          <h1>${q.emoji ? q.emoji + ' ' : ''}${esc(q.title)}</h1>
+          <div class="bars">${q.options.map((o, i) => `<div class="bar" id="b${i}"><div class="fill"></div><div class="lab"><span class="n">${i + 1}</span>${esc(o)}</div><div class="pct"><small id="c${i}">0명</small><span id="p${i}">0%</span></div></div>`).join('')}</div></div>
+          ${qrBox('📱 지금 참여하세요')}`;
+      }
+      drawQR();
+    }
+    if (q) {
+      const c = st.counts || q.options.map(() => 0);
+      const tot = c.reduce((a, b) => a + b, 0), max = Math.max(...c);
+      document.getElementById('tot').textContent = tot;
+      document.getElementById('closed').style.display = st.open ? 'none' : 'inline-block';
+      c.forEach((v, i) => {
+        const p = tot ? Math.round(v / tot * 100) : 0;
+        const b = document.getElementById('b' + i);
+        b.querySelector('.fill').style.width = p + '%';
+        b.classList.toggle('top', tot > 0 && v === max);
+        document.getElementById('p' + i).textContent = p + '%';
+        document.getElementById('c' + i).textContent = v + '명';
+      });
+    }
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/api/state?results=1', { cache: 'no-store' });
+      st = await r.json();
+      render();
+      document.getElementById('msg').textContent = '';
+    } catch (e) {
+      console.error('live-poll state', e);
+      document.getElementById('msg').textContent = '연결 중… (' + (e && e.message || e) + ')';
+    }
+  }
+  poll(); setInterval(poll, 1500);
+  setInterval(() => { const b = document.getElementById('step'); if (b && KEY) b.textContent = stepLabel(); }, 300);
+
+  // 진행자 조작: 화면 아래 버튼 또는 키보드 (→/PageDown 다음, ←/PageUp 이전, Space 열기/마감, Esc 대기 화면)
+  // 한 버튼 진행: 대기 → Q1 열기 → 마감 → 다음 문항 열기 → … → 마지막 문항 마감 → 대기 화면
+  function stepAction() {
+    if (!st || st.current < 0) return 'open';
+    if (st.open) return 'close';
+    return st.current < st.total - 1 ? 'next' : 'end';
+  }
+  function stepLabel() {
+    const a = stepAction();
+    return { open: '▶ 투표 시작', close: '⏸ 마감', next: `다음 문항 ▶ (Q${st ? st.current + 2 : 1})`, end: embedded ? '✓ 투표 끝내기 → 다음 슬라이드' : '✓ 투표 끝내기' }[a];
+  }
+  const embedded = window.self !== window.top;
+
+  async function act(action) {
+    const msg = document.getElementById('msg');
+    const fromStep = action === 'step';
+    if (fromStep) action = stepAction();
+    // '✓ 투표 끝내기': 투표를 끝내고 발표를 다음 슬라이드로 넘긴다 (슬라이드 안에 있을 때)
+    const goNext = fromStep && action === 'end' && embedded;
+    if (action === 'reset' && !confirm('모든 투표 결과를 지우고 처음부터 시작할까요?')) return;
+    // 슬라이드 안에 들어 있을 때: 누른 뒤 키보드 초점을 발표 화면에 돌려주어 슬라이드 넘기기가 계속 되게 한다
+    if (embedded) { try { document.activeElement && document.activeElement.blur(); window.parent.focus(); } catch (e) {} }
+    try {
+      const r = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: KEY, action }) });
+      const j = await r.json();
+      msg.textContent = r.ok ? '' : j.error || '실패';
+      if (r.ok && goNext) window.parent.postMessage({ type: 'hppt-nav', action: 'next' }, '*');
+      poll();
+    } catch (e) { msg.textContent = '연결 실패'; }
+  }
+  if (KEY) {
+    const ctrl = document.getElementById('ctrl');
+    ctrl.style.display = 'flex';
+    ctrl.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) act(b.dataset.a); });
+    // 키보드 조작은 단독 창에서만 (슬라이드 안에서는 → ← 가 슬라이드 넘기기여야 하므로)
+    if (!embedded) addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') act(st && st.current < 0 ? 'open' : 'next');
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') act('prev');
+      else if (e.key === ' ') { e.preventDefault(); act(st && st.open ? 'close' : 'open'); }
+      else if (e.key === 'Escape') act('end');
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "title": "광합성 이야기",
+  "aspect": "16:9",
+  "theme": "pastel",
+  "palette": { "accent": "#2f9e44", "accent2": "#7fb3ff" },
+  "transition": "cover-left",
+  "slides": [
+    { "layout": "title", "title": "식물은 어떻게 밥을 먹을까?", "subtitle": "광합성 이야기 · 중학교 과학", "fx": { "type": "bubbles", "color": "#2f9e44" } },
+    { "layout": "agenda", "title": "오늘 배울 내용", "bullets": ["광합성이란?", "필요한 재료", "만들어지는 것", "퀴즈 타임"] },
+    { "layout": "section", "number": "01", "title": "광합성이란?", "subtitle": "빛 에너지로 양분을 만드는 과정", "transition": "zoom-in" },
+    { "layout": "cards", "title": "광합성의 재료", "bullets": ["☀️ 빛: 에너지를 줘요", "💧 물: 뿌리로 흡수", "🌬️ 이산화탄소: 잎의 기공으로"] },
+    { "layout": "image-text", "title": "엽록체에서 일어나요", "bullets": ["잎의 초록색 = 엽록소", "포도당과 산소가 만들어짐", "산소는 공기 중으로!"] },
+    { "layout": "blank", "transition": "fade",
+      "elements": [
+        { "type": "text", "text": "광합성 식", "x": "7%", "y": "8%", "w": "86%", "h": "12%", "fontSize": 64, "bold": true, "role": "title", "color": "#6a4c93" },
+        { "type": "shape", "shape": "rounded", "text": "이산화탄소 + 물", "x": "7%", "y": "38%", "w": "30%", "h": "22%", "fill": "#7fb3ff", "color": "#ffffff", "fontSize": 44, "bold": true, "anim": "fly-left" },
+        { "type": "shape", "shape": "arrow-right", "text": "빛", "x": "40%", "y": "40%", "w": "20%", "h": "18%", "fill": "#fcc419", "color": "#5c3d00", "fontSize": 40, "bold": true, "anim": { "effect": "wipe-right", "trigger": "after" } },
+        { "type": "shape", "shape": "rounded", "text": "포도당 + 산소", "x": "63%", "y": "38%", "w": "30%", "h": "22%", "fill": "#2f9e44", "color": "#ffffff", "fontSize": 44, "bold": true, "anim": { "effect": "bounce-in", "trigger": "after" } },
+        { "type": "shape", "shape": "pill", "text": "💡 힌트 보기", "x": "38%", "y": "72%", "w": "24%", "h": "10%", "fill": "#ff7eb6", "color": "#ffffff", "fontSize": 34, "bold": true, "hover": "grow", "action": { "type": "toggle", "target": "key:hint" } },
+        { "type": "text", "key": "hint", "text": "빛 에너지가 **화학 에너지**(포도당)로 바뀌어요!", "x": "15%", "y": "85%", "w": "70%", "h": "9%", "fontSize": 34, "align": "center", "valign": "middle", "fill": "#fff3bf", "radius": 20, "color": "#5c3d00", "startHidden": true }
+      ] },
+    { "layout": "quiz", "title": "광합성으로 만들어지지 않는 것은?", "bullets": ["포도당", "산소", "이산화탄소", "녹말"], "correct": 3, "caption": "💡 정답: 이산화탄소 — 광합성의 '재료'예요", "fx": { "type": "bubbles", "color": "#7fb3ff" } },
+    { "layout": "closing", "title": "참 잘했어요! 🌱", "subtitle": "다음 시간: 호흡과 광합성 비교", "transition": "circle" }
+  ]
+}

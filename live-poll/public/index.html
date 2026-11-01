@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리 교회 부부 실태 조사</title>
+<meta property="og:title" content="우리 교회 부부 실태 조사 🗳️">
+<meta property="og:description" content="무기명 투표 · 이름은 저장되지 않습니다. 눌러서 참여하세요!">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Nanum+Myeongjo:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0f1b2d; --bg2:#16243b; --card:rgba(255,255,255,.06); --line:rgba(255,255,255,.14); --text:#e6ebf2; --dim:#97a3b5; --gold:#d4a24c; --rose:#eba89d; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; min-height:100%; }
+  body { background:linear-gradient(160deg,var(--bg),var(--bg2)); color:var(--text); font-family:'Noto Sans KR',sans-serif; min-height:100vh; min-height:100dvh; }
+  .wrap { max-width:520px; margin:0 auto; padding:22px 18px calc(28px + env(safe-area-inset-bottom)); }
+  .top { display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--dim); }
+  .badge { background:rgba(212,162,76,.16); color:var(--gold); border:1px solid rgba(212,162,76,.45); border-radius:99px; padding:4px 10px; font-weight:700; }
+  h1 { font-family:'Nanum Myeongjo',serif; font-size:26px; line-height:1.4; margin:26px 0 8px; word-break:keep-all; }
+  .emoji { font-size:44px; margin-top:18px; }
+  .hint { color:var(--dim); font-size:14px; margin-bottom:18px; }
+  .opts { display:flex; flex-direction:column; gap:12px; }
+  button.opt { all:unset; box-sizing:border-box; width:100%; display:flex; align-items:center; gap:14px; padding:18px 18px; border-radius:16px; background:var(--card); border:2px solid var(--line); font-size:19px; font-weight:700; cursor:pointer; transition:transform .12s, border-color .2s, background .2s; word-break:keep-all; }
+  button.opt:active { transform:scale(.98); }
+  button.opt .n { flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.1); font-size:16px; }
+  button.opt.on { border-color:var(--gold); background:rgba(212,162,76,.18); }
+  button.opt.on .n { background:var(--gold); color:#0f1b2d; }
+  button.opt[disabled] { opacity:.55; cursor:default; }
+  button.opt.on[disabled] { opacity:1; }
+  .done { margin-top:18px; text-align:center; font-size:15px; color:var(--gold); min-height:22px; font-weight:700; }
+  .wait { text-align:center; padding-top:22vh; }
+  .wait .big { font-size:64px; animation:float 2.4s ease-in-out infinite; }
+  .wait h2 { font-family:'Nanum Myeongjo',serif; font-size:24px; margin:18px 0 8px; }
+  .wait p { color:var(--dim); margin:0; line-height:1.6; }
+  .foot { margin-top:34px; text-align:center; color:var(--dim); font-size:12px; line-height:1.6; }
+  .err { color:var(--rose); }
+  @keyframes float { 50% { transform:translateY(-10px); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><span class="badge">🔒 무기명 투표</span><span id="prog"></span></div>
+  <div id="app"></div>
+  <div class="foot">이름이나 연락처는 저장되지 않습니다.<br>화면에 나오는 결과는 전체 합계뿐입니다.</div>
+</div>
+<script>
+(() => {
+  // 무작위 기기 id — 같은 폰에서 두 번 투표하지 않도록만 쓰인다 (누구인지는 알 수 없음)
+  let device;
+  try { device = localStorage.getItem('lp.device'); } catch (e) {}
+  if (!device) {
+    device = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+    try { localStorage.setItem('lp.device', device); } catch (e) {}
+  }
+  const app = document.getElementById('app'), prog = document.getElementById('prog');
+  let st = null, mine = null, sending = false, key = '';
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render() {
+    if (!st) return;
+    if (st.current < 0 || !st.question) {
+      prog.textContent = '';
+      key = '';
+      if (st.done) {
+        app.innerHTML = '<div class="wait"><div class="big">🙏</div><h2>투표가 모두 끝났습니다</h2><p>참여해 주셔서 감사합니다.<br>이제 말씀에 함께 귀 기울여 주세요.</p></div>';
+        return;
+      }
+      app.innerHTML = '<div class="wait"><div class="big">🗳️</div><h2>잠시 후 투표가 시작됩니다</h2><p>이 화면을 켜 두세요.<br>문항이 나오면 자동으로 바뀝니다.</p></div>';
+      return;
+    }
+    const q = st.question;
+    prog.textContent = `${st.current + 1} / ${st.total}`;
+    const k = st.session + ':' + st.current + ':' + st.open + ':' + mine;
+    if (k === key) return; // 바뀐 것이 없으면 다시 그리지 않음
+    key = k;
+    app.innerHTML = `<div class="emoji">${q.emoji || ''}</div><h1>${esc(q.title)}</h1>
+      <div class="hint">${st.open ? '하나를 골라 누르세요. 다시 누르면 바꿀 수 있어요.' : '이 문항은 마감되었습니다.'}</div>
+      <div class="opts">${q.options.map((o, i) => `<button class="opt${mine === i ? ' on' : ''}" data-i="${i}" ${st.open ? '' : 'disabled'}><span class="n">${i + 1}</span><span>${esc(o)}</span></button>`).join('')}</div>
+      <div class="done" id="done">${mine != null ? '✓ 투표했습니다! 큰 화면을 봐 주세요 👀' : ''}</div>`;
+  }
+
+  app.addEventListener('click', async (e) => {
+    const b = e.target.closest('button.opt');
+    if (!b || sending || !st || !st.open) return;
+    const option = +b.dataset.i, prev = mine;
+    mine = option; render();
+    sending = true;
+    try {
+      const r = await fetch('/api/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device, session: st.session, q: st.current, option }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); mine = prev; key = ''; render(); const d = document.getElementById('done'); if (d) d.innerHTML = '<span class="err">' + esc(j.error || '전송 실패 — 다시 눌러 주세요') + '</span>'; poll(); }
+      else if (navigator.vibrate) navigator.vibrate(30);
+    } catch (err) {
+      mine = prev; key = ''; render();
+      const d = document.getElementById('done'); if (d) d.innerHTML = '<span class="err">인터넷 연결을 확인해 주세요</span>';
+    }
+    sending = false;
+  });
+
+  async function poll() {
+    try {
+      const r = await fetch('/api/state?device=' + device, { cache: 'no-store' });
+      const j = await r.json();
+      if (!sending) {
+        if (!st || j.session !== st.session || j.current !== st.current) key = '';
+        st = j;
+        mine = j.mine == null ? null : j.mine;
+        render();
+      }
+    } catch (e) { /* 다음 주기에 다시 */ }
+  }
+  poll();
+  setInterval(() => { if (!document.hidden) poll(); }, 2500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>

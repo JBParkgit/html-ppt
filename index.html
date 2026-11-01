@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML 프레젠테이션 스튜디오</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700&family=Gowun+Dodum&family=Black+Han+Sans&family=Do+Hyeon&family=Jua&family=Nanum+Pen+Script&family=Montserrat:wght@400;700;900&family=Playfair+Display:wght@400;700&family=Roboto+Mono&display=swap">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%233b5bdb%27/%3E%3Cpath d=%27M12 9l12 7-12 7z%27 fill=%27white%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="tb-group brand">
+      <span class="logo">▣</span>
+      <input id="doc-title" class="doc-title" spellcheck="false" title="문서 제목">
+      <span id="save-state" class="save-state"></span>
+      <span id="live-state" class="live-state" hidden></span>
+    </div>
+    <div class="tb-group">
+      <button id="btn-file" class="tb-btn">파일 ▾</button>
+      <button id="btn-undo" class="tb-btn icon" title="실행 취소 (Ctrl+Z)">↶</button>
+      <button id="btn-redo" class="tb-btn icon" title="다시 실행 (Ctrl+Y)">↷</button>
+    </div>
+    <div class="tb-group">
+      <button id="btn-new-slide" class="tb-btn" title="새 슬라이드 (Ctrl+M)">＋<span class="lbl"> 슬라이드</span></button>
+      <button id="btn-text" class="tb-btn" title="텍스트 상자"><b>T</b><span class="lbl"> 텍스트</span></button>
+      <button id="btn-shape" class="tb-btn" title="도형">▭<span class="lbl"> 도형</span></button>
+      <button id="btn-pen" class="tb-btn" title="펜 (P) — 클릭: 모서리점 · 끌기: 곡선점 · 첫 점 클릭: 닫기 · Enter: 끝 / 그린 선은 더블클릭해서 점 편집">✒<span class="lbl"> 펜</span></button>
+      <button id="btn-image" class="tb-btn" title="이미지 (파일, 드래그, 붙여넣기)">🖼<span class="lbl"> 이미지</span></button>
+      <button id="btn-video" class="tb-btn" title="동영상/오디오 파일">🎬<span class="lbl"> 동영상</span></button>
+      <button id="btn-embed" class="tb-btn" title="YouTube / Vimeo / URL">▶<span class="lbl"> 웹 동영상</span></button>
+      <button id="btn-model" class="tb-btn" title="3D 모델 (glTF · GLB)">🧊<span class="lbl"> 3D</span></button>
+      <button id="btn-table" class="tb-btn" title="표">▦<span class="lbl"> 표</span></button>
+      <button id="btn-chart" class="tb-btn" title="움직이는 차트">📊<span class="lbl"> 차트</span></button>
+      <button id="btn-code" class="tb-btn" title="코드 (문법 강조 · Magic Move)">&lt;/&gt;<span class="lbl"> 코드</span></button>
+      <button id="btn-button" class="tb-btn" title="클릭 동작이 있는 버튼">🔘<span class="lbl"> 버튼</span></button>
+      <button id="btn-music" class="tb-btn" title="배경음악 — 슬라이드별로 나올 음악 정하기">🎵<span class="lbl"> 음악</span></button>
+      <button id="btn-icon" class="tb-btn" title="아이콘 (이모지)">😀</button>
+    </div>
+    <div class="tb-group">
+      <button id="btn-overview" class="tb-btn" title="전체 보기 (G) — 모든 슬라이드를 한눈에 보고 이동 · 끌어서 순서 바꾸기">⊞<span class="lbl"> 전체 보기</span></button>
+      <select id="aspect-sel" class="tb-select" title="화면 비율"></select>
+      <button id="btn-zoom-out" class="tb-btn icon" title="축소 (Ctrl -)">−</button>
+      <button id="zoom-label" class="tb-btn zoom" title="화면에 맞춤 (Ctrl 0)">100%</button>
+      <button id="btn-zoom-in" class="tb-btn icon" title="확대 (Ctrl +)">＋</button>
+    </div>
+    <div class="tb-group" id="tb-more-group" hidden>
+      <button id="btn-more" class="tb-btn" title="좁은 창에서 숨겨진 메뉴">⋯<span class="lbl-more"> 더보기</span></button>
+    </div>
+    <div class="tb-group right">
+      <div class="split">
+        <button id="btn-present" class="tb-btn present" title="발표 (F5 · Ctrl+Enter) — 새로고침은 Ctrl+R">▶ 발표</button><button id="btn-present-menu" class="tb-btn present more" title="발표 옵션">▾</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <aside id="slides-panel">
+      <div id="slide-list"></div>
+      <button class="add-slide" onclick="App.layoutPicker(this)">＋ 새 슬라이드</button>
+    </aside>
+
+    <section id="workspace">
+      <div id="morph-banner" class="morph-banner" hidden></div>
+      <div id="stage-wrap">
+        <div id="stage">
+          <div id="canvas">
+            <div id="sel-layer"></div>
+          </div>
+        </div>
+      </div>
+      <div id="notes-bar">
+        <textarea id="notes" placeholder="발표자 노트를 입력하세요… (발표 중 N 키로 표시)"></textarea>
+      </div>
+    </section>
+
+    <aside id="props-panel">
+      <nav id="props-tabs">
+        <button data-tab="props" class="on">속성</button>
+        <button data-tab="anim">애니메이션</button>
+        <button data-tab="slide">슬라이드</button>
+      </nav>
+      <div class="tab-pane" data-pane="props"><div class="pane-body"></div></div>
+      <div class="tab-pane" data-pane="anim" hidden><div class="pane-body"></div></div>
+      <div class="tab-pane" data-pane="slide" hidden><div class="pane-body"></div></div>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <span id="status-left"></span>
+    <span class="status-right">텍스트 편집: 더블클릭 · 선택 후 한 번 더 클릭 · 선택 후 바로 입력 · F1 단축키</span>
+  </footer>
+
+  <div id="text-bar" class="text-bar" hidden data-keep-edit>
+    <button data-cmd="bold" title="굵게"><b>B</b></button>
+    <button data-cmd="italic" title="기울임"><i>I</i></button>
+    <button data-cmd="underline" title="밑줄"><u>U</u></button>
+    <button data-cmd="strikeThrough" title="취소선"><s>S</s></button>
+    <span class="tb-sep"></span>
+    <button data-cmd="size" data-val="-6" title="선택 글자 작게">A−</button>
+    <button data-cmd="size" data-val="6" title="선택 글자 크게">A+</button>
+    <span class="tb-sep"></span>
+    <span class="tb-colors"></span>
+    <span class="tb-sep"></span>
+    <span class="tb-hl"></span>
+    <span class="tb-sep"></span>
+    <button data-cmd="insertUnorderedList" title="글머리 기호">• 목록</button>
+    <button data-cmd="insertOrderedList" title="번호 매기기">1. 목록</button>
+    <button data-cmd="removeFormat" title="서식 지우기">⌫</button>
+    <span class="tb-sep"></span>
+    <button data-cmd="magic" class="tb-magic" title="이 텍스트로 Magic Move 다음 단계 만들기 (슬라이드 복제 + 모핑)">🪄 다음 단계</button>
+  </div>
+
+  <input type="file" id="file-input" hidden>
+  <div id="toasts"></div>
+
+  <script src="js/core.js"></script>
+  <script src="js/media.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/music-local.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/pen.js"></script>
+  <script src="js/panels.js"></script>
+  <script src="js/io.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/live.js"></script>
+</body>
+</html>

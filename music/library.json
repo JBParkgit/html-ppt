@@ -1,0 +1,148 @@
+{
+ "license": "이 폴더의 음악은 HTML 프레젠테이션 스튜디오의 make_music.py 로 직접 작곡·합성한 곡으로, 자유롭게 사용할 수 있습니다. 05번은 공개 저작물(Amazing Grace, New Britain) 선율을 편곡했습니다.",
+ "tracks": [
+  {
+   "id": "01-calm-piano",
+   "file": "music/01-calm-piano.mp3",
+   "title": "잔잔한 피아노",
+   "en": "Morning Light",
+   "mood": "평온 · 따뜻함",
+   "tags": [
+    "발표",
+    "병원",
+    "교회"
+   ],
+   "use": "병원 안내 영상, 설교 시작 전, 일반 발표 배경",
+   "bpm": 72,
+   "duration": 84.0
+  },
+  {
+   "id": "02-hopeful-acoustic",
+   "file": "music/02-hopeful-acoustic.mp3",
+   "title": "희망의 아침",
+   "en": "Hopeful Steps",
+   "mood": "희망 · 산뜻함",
+   "tags": [
+    "발표",
+    "병원",
+    "영상"
+   ],
+   "use": "오프닝, 홍보 영상, 새 출발 메시지",
+   "bpm": 96,
+   "duration": 84.0
+  },
+  {
+   "id": "03-corporate-bright",
+   "file": "music/03-corporate-bright.mp3",
+   "title": "비즈니스 업비트",
+   "en": "Bright Business",
+   "mood": "활기 · 전문적",
+   "tags": [
+    "발표",
+    "영상"
+   ],
+   "use": "회사 소개, 성과 보고, 제품 발표",
+   "bpm": 110,
+   "duration": 82.5
+  },
+  {
+   "id": "04-meditation-pad",
+   "file": "music/04-meditation-pad.mp3",
+   "title": "고요한 묵상",
+   "en": "Quiet Prayer",
+   "mood": "고요 · 묵상",
+   "tags": [
+    "교회",
+    "병원"
+   ],
+   "use": "기도 시간, 묵상, 설교 배경, 회복실 안내",
+   "bpm": 60,
+   "duration": 70.0
+  },
+  {
+   "id": "05-amazing-grace",
+   "file": "music/05-amazing-grace.mp3",
+   "title": "놀라운 은혜 (Amazing Grace)",
+   "en": "Amazing Grace — Organ & Strings",
+   "mood": "경건 · 찬양",
+   "tags": [
+    "교회"
+   ],
+   "use": "예배 전후, 찬양 묵상 (공개 저작물 찬송가 선율)",
+   "bpm": 76,
+   "duration": 80.8
+  },
+  {
+   "id": "06-clean-medical",
+   "file": "music/06-clean-medical.mp3",
+   "title": "맑은 케어",
+   "en": "Gentle Care",
+   "mood": "깨끗함 · 신뢰",
+   "tags": [
+    "병원",
+    "발표"
+   ],
+   "use": "병원 홍보, 건강 정보, 검사 안내",
+   "bpm": 84,
+   "duration": 72.6
+  },
+  {
+   "id": "07-tech-pulse",
+   "file": "music/07-tech-pulse.mp3",
+   "title": "미래 기술",
+   "en": "Tech Pulse",
+   "mood": "역동 · 미래",
+   "tags": [
+    "발표",
+    "영상"
+   ],
+   "use": "기술·혁신 발표, 신제품 소개, 데이터 영상",
+   "bpm": 118,
+   "duration": 85.4
+  },
+  {
+   "id": "08-cinematic-rise",
+   "file": "music/08-cinematic-rise.mp3",
+   "title": "감동의 순간",
+   "en": "Cinematic Rise",
+   "mood": "감동 · 웅장",
+   "tags": [
+    "교회",
+    "영상",
+    "발표"
+   ],
+   "use": "간증, 감동 영상, 마무리 슬라이드",
+   "bpm": 70,
+   "duration": 60.9
+  },
+  {
+   "id": "09-happy-marimba",
+   "file": "music/09-happy-marimba.mp3",
+   "title": "즐거운 하루",
+   "en": "Happy Day",
+   "mood": "밝음 · 경쾌",
+   "tags": [
+    "영상",
+    "교회",
+    "병원"
+   ],
+   "use": "어린이 교육, 행사 영상, 주일학교",
+   "bpm": 120,
+   "duration": 68.0
+  },
+  {
+   "id": "10-lofi-chill",
+   "file": "music/10-lofi-chill.mp3",
+   "title": "편안한 대기실",
+   "en": "Lo-fi Lounge",
+   "mood": "편안 · 여유",
+   "tags": [
+    "병원",
+    "영상"
+   ],
+   "use": "대기실 화면, 쉬는 시간, 카페 분위기",
+   "bpm": 80,
+   "duration": 76.0
+  }
+ ]
+}

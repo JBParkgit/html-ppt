@@ -1,0 +1,54 @@
+{
+  "title": "Magic Move 예제",
+  "aspect": "16:9",
+  "theme": "tech",
+  "palette": { "bg": "#1e1e2e", "title": "#cdd6f4", "text": "#a6adc8", "accent": "#89b4fa", "accent2": "#f38ba8" },
+  "transition": "fade",
+  "slides": [
+    { "layout": "title", "title": "Magic Move", "subtitle": "코드·글자·차트가 이어서 움직이는 전환", "fx": { "type": "particles", "color": "#89b4fa" } },
+    {
+      "layout": "blank", "notes": "1단계: 가장 단순한 함수",
+      "elements": [
+        { "type": "text", "role": "title", "key": "h", "text": "함수 만들기", "x": "7%", "y": "7%", "w": "86%", "h": "11%", "fontSize": 60, "bold": true, "color": "#cdd6f4" },
+        { "type": "code", "key": "code", "lang": "js", "title": "sum.js", "x": "7%", "y": "22%", "w": "60%", "h": "40%", "fontSize": 40, "code": "function sum(a, b) {\n  return a + b;\n}" }
+      ]
+    },
+    {
+      "layout": "blank", "transition": { "type": "morph", "duration": 1300 }, "notes": "2단계: 타입을 붙입니다 — 바뀌지 않은 단어는 그대로 날아갑니다",
+      "elements": [
+        { "type": "text", "role": "title", "key": "h", "text": "타입 붙이기", "x": "7%", "y": "7%", "w": "86%", "h": "11%", "fontSize": 60, "bold": true, "color": "#cdd6f4" },
+        { "type": "code", "key": "code", "lang": "ts", "title": "sum.ts", "x": "7%", "y": "22%", "w": "86%", "h": "45%", "fontSize": 40, "code": "function sum(a: number, b: number): number {\n  return a + b;\n}" }
+      ]
+    },
+    {
+      "layout": "blank", "transition": { "type": "morph", "duration": 1300 }, "notes": "3단계: 변수로 나누고 내보내기 — 3번째 줄 강조",
+      "elements": [
+        { "type": "text", "role": "title", "key": "h", "text": "정리하고 내보내기", "x": "7%", "y": "7%", "w": "86%", "h": "11%", "fontSize": 60, "bold": true, "color": "#cdd6f4" },
+        { "type": "code", "key": "code", "lang": "ts", "title": "sum.ts", "highlightLines": "3", "x": "7%", "y": "22%", "w": "86%", "h": "58%", "fontSize": 40, "code": "// 두 수를 더합니다\nexport function sum(a: number, b: number): number {\n  const total = a + b;\n  return total;\n}" }
+      ]
+    },
+    {
+      "layout": "blank", "notes": "글자도 단어 단위로 이어집니다",
+      "elements": [ { "type": "text", "key": "msg", "text": "좋은 발표는 이야기에서 시작됩니다", "x": "7%", "y": "38%", "w": "86%", "h": "20%", "fontSize": 84, "bold": true, "align": "center", "valign": "middle", "color": "#cdd6f4" } ]
+    },
+    {
+      "layout": "blank", "transition": { "type": "morph", "duration": 1300 },
+      "elements": [ { "type": "text", "key": "msg", "text": "좋은 발표는 **좋은 이야기**와 {#f38ba8|연습}에서 시작됩니다", "x": "7%", "y": "20%", "w": "86%", "h": "30%", "fontSize": 72, "bold": true, "align": "center", "valign": "middle", "color": "#cdd6f4" } ]
+    },
+    {
+      "layout": "blank", "bg": "#ffffff", "notes": "값이 바뀌는 차트 — 다음 슬라이드에서 막대가 새 값으로 움직입니다 (예시 수치)",
+      "elements": [
+        { "type": "text", "role": "title", "key": "ct", "text": "2025 분기 매출 (예시)", "x": "7%", "y": "6%", "w": "86%", "h": "10%", "fontSize": 56, "bold": true, "color": "#1e1e2e" },
+        { "type": "chart", "key": "chart", "chartType": "bar", "x": "7%", "y": "18%", "w": "86%", "h": "74%", "fontSize": 30, "color": "#333333", "unit": "억", "target": 80, "yMax": 100, "data": [["분기", "매출"], ["1Q", 40], ["2Q", 52], ["3Q", 61], ["4Q", 70]], "anim": "chart-draw" }
+      ]
+    },
+    {
+      "layout": "blank", "bg": "#ffffff", "transition": { "type": "morph", "duration": 1400 },
+      "elements": [
+        { "type": "text", "role": "title", "key": "ct", "text": "2026 분기 매출 (예시)", "x": "7%", "y": "6%", "w": "86%", "h": "10%", "fontSize": 56, "bold": true, "color": "#1e1e2e" },
+        { "type": "chart", "key": "chart", "chartType": "bar", "x": "7%", "y": "18%", "w": "86%", "h": "74%", "fontSize": 30, "color": "#333333", "unit": "억", "target": 80, "yMax": 100, "highlight": 4, "data": [["분기", "매출"], ["1Q", 55], ["2Q", 68], ["3Q", 80], ["4Q", 96]] }
+      ]
+    },
+    { "layout": "closing", "title": "감사합니다", "subtitle": "발표 중 P 키 → 발표자 보기" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "title": "아침 루틴 5가지",
+  "aspect": "4:5",
+  "theme": "classic",
+  "palette": { "bg": "#ffde59", "title": "#111111", "text": "#222222", "accent": "#ff3131", "accent2": "#004aad", "fontTitle": "'Black Han Sans', sans-serif" },
+  "transition": "push-left",
+  "slides": [
+    { "layout": "title", "title": "성공하는 사람들의\n아침 루틴 5", "subtitle": "저장해 두고 내일부터 ✔", "fx": { "type": "shapes", "color": "#ff3131", "color2": "#004aad" } },
+    { "layout": "big-number", "number": "01", "title": "기상 직후 물 한 잔", "caption": "밤새 빠진 수분 보충 → 집중력 UP" },
+    { "layout": "big-number", "number": "02", "title": "5분 스트레칭", "caption": "굳은 몸을 깨우는 가장 쉬운 방법" },
+    { "layout": "big-number", "number": "03", "title": "오늘 할 일 3개 적기", "caption": "많이 말고, 꼭 할 것만" },
+    { "layout": "stats", "title": "작은 습관의 힘", "bullets": ["66일: 습관이 되는 평균 기간", "1%: 매일 나아지면 1년 뒤 37배"] },
+    { "layout": "closing", "title": "내일 아침부터!", "subtitle": "도움이 됐다면 저장 · 공유 💛", "transition": "zoom-in" }
+  ]
+}
