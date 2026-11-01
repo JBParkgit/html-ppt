@@ -9,6 +9,8 @@ music/pixabay/
 # 배포 · 의존성 · 임시
 node_modules/
 .vercel/
-live-poll/.vercel/
 _*.html
 .claude/settings.local.json
+
+# 투표 앱(live-poll)은 별도 관리 — 이 저장소에 넣지 않음
+live-poll/

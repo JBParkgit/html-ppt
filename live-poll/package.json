@@ -1,8 +1,0 @@
-{
-  "name": "live-poll",
-  "private": true,
-  "version": "1.0.0",
-  "description": "무기명 실시간 투표 (스마트폰 투표 + 큰 화면 결과 + QR)",
-  "engines": { "node": ">=18" },
-  "scripts": { "dev": "node dev-server.js" }
-}
