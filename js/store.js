@@ -768,7 +768,44 @@ function applyTheme(deck, themeId, slidesOnly, custom, opts) {
     for (const s of SLOTS) if (N(old[s]) === k) return t[s];
     return v;
   };
-  const mapHtml = (html) => typeof html === 'string' ? html.replace(/#[0-9a-f]{6}\b/gi, (m) => mapColor(m)) : html;
+  /* 글 안의 색(인라인 span/font): 이전 테마 색이면 새 테마의 같은 자리 색으로.
+     - 테마 색 자리를 data-tc="accent" 처럼 태그에 적어 두고, 다음 테마 변경 때는 그 자리를 먼저 쓴다
+       (한 테마에서 두 자리가 같은 색이어도 엉뚱한 자리로 가지 않게)
+     - 편집기가 저장하는 rgb(…) 형식도 #rrggbb 처럼 다룬다
+     - 적힌 자리와 실제 색이 다르면(나중에 다른 색으로 칠함) 자리 표시를 지운다 */
+  const rgbHexOf = (v) => {
+    const m = String(v).match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+    if (!m || (m[4] != null && +m[4] < 1)) return null;
+    return '#' + [m[1], m[2], m[3]].map((x) => Math.min(255, +x).toString(16).padStart(2, '0')).join('');
+  };
+  const hexOf = (v) => (v[0] === '#' ? N(v) : rgbHexOf(v));
+  const htmlSlot = (k, saved) => {
+    if (!k) return null;
+    if (saved && N(old[saved]) === k) return saved;
+    if (PLAIN.includes(k)) return null;
+    return SLOTS.find((s) => N(old[s]) === k) || null;
+  };
+  const mapTag = (tag) => {
+    if (!/color/i.test(tag) && !/data-tc=/i.test(tag)) return tag;
+    const sm = tag.match(/\sdata-tc="([a-z0-9]+)"/i);
+    const saved = sm && SLOTS.includes(sm[1]) ? sm[1] : null;
+    let slot = null;
+    const fore = (m, pre, v) => {
+      const s = htmlSlot(hexOf(v), saved);
+      if (!s) return m;
+      slot = s;
+      return m.replace(v, t[s]);
+    };
+    tag = tag
+      .replace(/\sdata-tc="[^"]*"/gi, '')
+      // 글자 색 — style 의 color (background-color 는 제외), <font color="…">
+      .replace(/((?:[\s;"'])color\s*:\s*)(#[0-9a-f]{3,6}\b|rgba?\([^)]*\))/gi, fore)
+      .replace(/(\scolor\s*=\s*")(#[0-9a-f]{3,6})(?=")/gi, fore)
+      // 형광펜·배경 — 테마 색이면 같은 자리 색으로 (자리 표시는 남기지 않는다)
+      .replace(/(background(?:-color)?\s*:\s*)(#[0-9a-f]{6})\b/gi, (m, pre, v) => pre + mapColor(v));
+    return slot ? tag.replace(/^<([a-z0-9]+)/i, `<$1 data-tc="${slot}"`) : tag;
+  };
+  const mapHtml = (html) => typeof html === 'string' ? html.replace(/<[a-z][a-z0-9]*\b[^>]*>/gi, mapTag) : html;
   const codeThemeOf = (th) => (th.bg && /^#(f|e|d)/i.test(th.bg.color || '') ? 'light' : 'dark');
   const sameBg = (a, b) => (a.type || 'color') === (b.type || 'color') && N(a.color) === N(b.color) && ((a.type || 'color') !== 'gradient' || String(a.gradient || '').replace(/\s/g, '') === String(b.gradient || '').replace(/\s/g, ''));
   const FX_KEYS = ['fx', 'fxColor', 'fxColor2', 'fxSpeed', 'fxSeed'];

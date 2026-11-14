@@ -34,6 +34,7 @@ CLI: `node .claude/skills/slide-studio/scripts/deck.mjs <command>` (이하 `deck
 |---|---|
 | `start [--open]` | 서버 실행 (+ 편집기 열기) |
 | `status` / `show [n]` / `get [--out f]` | 상태, 요약/상세, 전체 JSON |
+| `selection` | 편집기에서 지금 선택한 슬라이드·개체·글자. 사용자가 "선택한 거", "이거", "이 슬라이드"처럼 말하면 **먼저 실행**해 대상을 확인하고, 나온 요소 id 로 `patch` 한다. "연결 안 됨"이거나, 개체를 가리킨 요청인데 "선택한 개체 없음"이면 추측하지 말고 다시 선택해 달라고 한다 |
 | `catalog [themes\|layouts\|anims\|transitions\|fx\|shapes\|actions\|charts\|fonts\|aspects\|hovers]` | 사용 가능한 값 목록 (확실하지 않으면 먼저 확인) |
 | `build <spec.json> [--append] [--at n]` | 사양으로 덱 생성/추가 |
 | `patch <ops.json\|->` | 부분 수정 (요소/슬라이드/테마/비율/애니메이션) |
@@ -59,7 +60,7 @@ decks 폴더는 **덱마다 `생성날짜_제목` 하위 폴더**로 정리한�
 - **레이아웃 슬라이드**: `{"layout":"stats","title":"…","bullets":["98%: 만족도", …]}` — 엔진이 테마에 맞춰 배치·애니메이션까지 만든다.
   레이아웃: title, section(+변형 section-center·section-band·section-right·section-number·section-frame), bullets, **긴 글용 text·text-2col·text-points·scripture·list-2col(글자 크기 자동 · 넘치면 자동 분할)**, two-column, image-text, quote, big-number, agenda, cards, timeline, stats, chart, quiz, image-full, closing, blank.
 - **직접 배치**: `"layout":"blank"` + `"elements":[…]` (좌표는 px 또는 `"10%"`). 레이아웃 위에 `elements` 를 덧붙이거나 `override`/`hide` 로 일부만 바꿀 수도 있다.
-- **텍스트 서식**: `text` 필드에 줄바꿈 `\n`, 글머리 `- `, `**굵게**`, `*기울임*`, `==형광펜==`, `{#ff6b6b|색 글자}`.
+- **텍스트 서식**: `text` 필드에 줄바꿈 `\n`, 글머리 `- `, `**굵게**`, `*기울임*`, `==형광펜==`, `{#ff6b6b|색 글자}`. 글자 색을 테마 색(제목·본문·강조·보조 강조) 값과 똑같이 넣으면 테마를 바꿀 때 같은 자리 색으로 따라 바뀐다(`data-tc` 로 자리를 기억). 다른 값은 직접 지정한 색으로 남는다.
 - **팔레트**: `"theme":"midnight"` + `"palette":{ "accent":"#…", … }` 로 기본 테마 색을 덮어쓴다 (design.md 의 팔레트를 그대로 복사해 쓰면 된다).
 - **동적 기능**: 차트(`chart`, 12종 — 막대·누적·100%누적·혼합·선·영역·원형·도넛·방사형·게이지·깔때기, 그려지며 등장, 목표선·강조·단위), 숫자 카운트업(`count-up` 효과), 버튼·퀴즈(`action`), 모핑(`"morph": true` 또는 `slide.duplicate` + `changes`),
   **Magic Move**(같은 key 의 code/텍스트 내용이 바뀌면 단어 단위로 이어서 움직임 — `examples/magic-move.json`), **차트 값 모핑**(같은 key 차트의 data 만 바꾸고 yMax 고정),

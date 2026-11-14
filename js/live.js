@@ -25,6 +25,9 @@ const Live = (() => {
     else { L.rev = st.rev; L.push(true); }
     const orig = Store.saveNow.bind(Store);
     Store.saveNow = function () { const ok = orig(); L.push(); return ok; };
+    Store.on(scheduleSelection);
+    document.addEventListener('selectionchange', () => { if (Editor.editing) scheduleSelection(); });
+    L.sendSelection(true);
     setInterval(poll, 1200);
     indicator('🔗 Claude 연동', true);
     setTimeout(() => L.backupMedia(), 1500);
@@ -49,6 +52,32 @@ const Live = (() => {
         indicator('⚠ 연동 끊김', false);
       }
     }, now ? 0 : 400);
+  };
+
+  // 지금 선택한 슬라이드·개체·글자를 서버에 알린다 → Claude 가 "선택한 거" 를 알 수 있다 (deck selection)
+  const SELECTED_TEXT_MAX = 500;
+  let selT = null, lastSel = '';
+  function scheduleSelection() {
+    clearTimeout(selT);
+    selT = setTimeout(() => L.sendSelection(), 150);
+  }
+  function selectedText() {
+    if (!Editor.editing) return '';
+    const g = window.getSelection();
+    const tc = document.querySelector(`#canvas .hp-el[data-id="${Editor.editing}"] .hp-tc`);
+    if (!g || g.isCollapsed || !tc || !tc.contains(g.anchorNode)) return '';
+    return g.toString().slice(0, SELECTED_TEXT_MAX);
+  }
+  L.sendSelection = async function (force) {
+    if (!L.on) return;
+    const s = Store.slide();
+    if (!s) return;
+    const body = JSON.stringify({ source: L.id, slideId: s.id, slide: Store.cur + 1, ids: Store.sel, text: selectedText() });
+    if (!force && body === lastSel) return;
+    lastSel = body;
+    try {
+      await fetch('/api/selection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    } catch (e) { lastSel = ''; /* 다음 변경 때 다시 보냄 */ }
   };
 
   // 브라우저(IndexedDB)에만 있는 그림·동영상·3D 모델을 서버(decks/media)에 백업한다
@@ -111,9 +140,10 @@ const Live = (() => {
     if (polling) return;
     polling = true;
     try {
-      const r = await fetch('/api/state', { cache: 'no-store' });
+      const r = await fetch('/api/state?editor=1', { cache: 'no-store' });
       const st = await r.json();
       indicator('🔗 Claude 연동', true);
+      if (st.hasSelection === false) L.sendSelection(true); // 서버가 다시 시작되면 선택 정보가 비어 있다
       if ((st.rev !== L.rev && st.source !== L.id) || L.deferred) await L.pull(false);
       if (st.cmdSeq > L.cmdSeq) { L.cmdSeq = st.cmdSeq; exec(st.cmd); }
     } catch (e) {

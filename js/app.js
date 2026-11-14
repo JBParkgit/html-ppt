@@ -211,6 +211,7 @@ const App = (() => {
     on('#btn-zoom-in', () => Editor.setZoom(Math.min(3, Editor.scale * 1.2)));
     on('#btn-zoom-out', () => Editor.setZoom(Math.max(0.1, Editor.scale / 1.2)));
     on('#zoom-label', () => Editor.setZoom('fit'));
+    on('#btn-zoom-fit', () => Editor.setZoom('fit'));
     on('#btn-present', () => A.present(0));
     on('#btn-present-menu', (e) => UI.menu(e.currentTarget, [
       ['▶ 처음부터', () => A.present(0), 'F5 · Ctrl+Enter'],
@@ -1188,11 +1189,11 @@ const App = (() => {
 
   /* ---------- 상단 메뉴 크기 맞춤: 넘치면 덜 쓰는 버튼부터 "⋯ 더보기" 로 ---------- */
   const TB_HIDE_ORDER = ['btn-icon', 'btn-music', 'btn-button', 'btn-code', 'btn-model', 'btn-embed', 'btn-chart', 'btn-table', 'btn-video',
-    'btn-overview', 'btn-zoom-out', 'btn-zoom-in', 'btn-pen', 'btn-image', 'btn-shape', 'btn-redo', 'btn-text', 'btn-new-slide', 'btn-undo'];
+    'btn-overview', 'btn-zoom-fit', 'btn-zoom-out', 'btn-zoom-in', 'btn-pen', 'btn-image', 'btn-shape', 'btn-redo', 'btn-text', 'btn-new-slide', 'btn-undo'];
   const TB_LABELS = { 'btn-icon': '😀 아이콘', 'btn-music': '🎵 배경음악', 'btn-button': '🔘 버튼', 'btn-code': '&lt;/&gt; 코드', 'btn-model': '🧊 3D 모델', 'btn-embed': '▶ 웹 동영상',
-    'btn-chart': '📊 차트', 'btn-table': '▦ 표', 'btn-video': '🎬 동영상', 'btn-overview': '⊞ 전체 보기', 'btn-zoom-out': '− 축소', 'btn-zoom-in': '＋ 확대', 'btn-pen': '✒ 펜',
+    'btn-chart': '📊 차트', 'btn-table': '▦ 표', 'btn-video': '🎬 동영상', 'btn-overview': '⊞ 전체 보기', 'btn-zoom-out': '− 축소', 'btn-zoom-in': '＋ 확대', 'btn-zoom-fit': '⤢ 화면 맞춤', 'btn-pen': '✒ 펜',
     'btn-image': '🖼 이미지', 'btn-shape': '▭ 도형', 'btn-redo': '↷ 다시 실행', 'btn-text': 'T 텍스트', 'btn-new-slide': '＋ 새 슬라이드', 'btn-undo': '↶ 실행 취소' };
-  const TB_KEYS = { 'btn-overview': 'G', 'btn-pen': 'P', 'btn-undo': 'Ctrl+Z', 'btn-redo': 'Ctrl+Y', 'btn-new-slide': 'Ctrl+M', 'btn-zoom-in': 'Ctrl +', 'btn-zoom-out': 'Ctrl -' };
+  const TB_KEYS = { 'btn-overview': 'G', 'btn-pen': 'P', 'btn-undo': 'Ctrl+Z', 'btn-redo': 'Ctrl+Y', 'btn-new-slide': 'Ctrl+M', 'btn-zoom-in': 'Ctrl +', 'btn-zoom-out': 'Ctrl -', 'btn-zoom-fit': 'Ctrl 0' };
   A.fitToolbar = function () {
     const tb = $('#topbar'), grp = $('#tb-more-group');
     if (!tb) return;
@@ -1832,6 +1833,7 @@ const App = (() => {
       ['Ctrl+B / I / U', '굵게 / 기울임 / 밑줄'],
       ['Ctrl+] / Ctrl+[', '앞으로 / 뒤로 (Shift: 맨 앞/뒤)'],
       ['Ctrl+휠, Ctrl +/−/0', '확대 / 축소 / 화면 맞춤'],
+      ['휠 / Shift + 휠', '확대 중: 위아래 / 좌우 스크롤, 끝에서 두 칸 더 굴리면 이전 / 다음 슬라이드 · 화면 맞춤: 바로 이전 / 다음 슬라이드'],
       ['Alt + 드래그', '스냅 없이 이동 (3D 모델: 돌리기)'],
       ['Alt + 휠', '3D 모델 가깝게 / 멀게'],
       ['PageUp / PageDown', '이전 / 다음 슬라이드'],
@@ -1854,13 +1856,160 @@ const App = (() => {
   };
 
   /* ---------------- 인라인 텍스트 도구막대 ---------------- */
+  const TB_FORE_COLORS = ['#000000', '#ffffff', '#e03131', '#f08c00', '#ffd43b', '#2f9e44', '#1971c2', '#7048e8', '#e64980', '#868e96'];
+  const TB_HILITE_COLORS = ['#fff3bf', '#d3f9d8', '#d0ebff', '#ffdeeb'];
+  const TB_MAX_USED_FORE = 6, TB_MAX_USED_HILITE = 4;
+  const TB_THEME_SLOTS = [['title', '제목'], ['text', '본문'], ['accent', '강조'], ['accent2', '보조 강조']];
+
+  // 글자 색 자리 표시(data-tc) 정리: 방금 테마 색으로 칠한 글자에는 자리를 적고,
+  // 적힌 자리와 실제 색이 달라진 글자(다른 색으로 다시 칠함)는 자리 표시를 지운다
+  function tagThemeColors(tc, slot, val) {
+    const th = theme();
+    tc.querySelectorAll('[style*="color"], font[color], [data-tc]').forEach((n) => {
+      const c = normColor(n.style.color) || (n.tagName === 'FONT' ? normColor(n.getAttribute('color')) : null);
+      if (slot && c && c === val) n.dataset.tc = slot;
+      else if (n.dataset.tc && (!c || c !== normColor(th[n.dataset.tc]))) delete n.dataset.tc;
+    });
+  }
+
+  // CSS 색 문자열을 비교 가능한 형태로 통일한다. 해석할 수 없거나(var() 등) 완전 투명이면 null
+  const colorProbe = document.createElement('canvas').getContext('2d');
+  function normColor(c) {
+    if (!c) return null;
+    colorProbe.fillStyle = '#000000'; colorProbe.fillStyle = c;
+    const a = colorProbe.fillStyle;
+    colorProbe.fillStyle = '#ffffff'; colorProbe.fillStyle = c;
+    if (a !== colorProbe.fillStyle || /,\s*0\)$/.test(a)) return null;
+    return a;
+  }
+
+  // 글자에 실제로 적용된 색을 글자 수 기준으로 집계한다 (el.color 는 인라인 색이 없는 글자에만 적용)
+  function tallyTextColors(html, baseColor, fore, hilite) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
+    const add = (map, c, n) => map.set(c, (map.get(c) || 0) + n);
+    while (walker.nextNode()) {
+      const n = walker.currentNode.nodeValue.replace(/\s/g, '').length;
+      if (!n) continue;
+      let color = null, bg = null;
+      for (let p = walker.currentNode.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+        if (!color) color = normColor(p.style.color) || (p.tagName === 'FONT' ? normColor(p.getAttribute('color')) : null);
+        if (!bg) bg = normColor(p.style.backgroundColor);
+      }
+      color = color || normColor(baseColor);
+      if (color) add(fore, color, n);
+      if (bg) add(hilite, bg, n);
+    }
+  }
+
+  // 본문에서 쓰인 색: 현재 슬라이드에 쓰인 색 먼저, 그다음 문서 전체. 각각 글자 수가 많은 순
+  function usedTextColors() {
+    const tally = (slides) => {
+      const fore = new Map(), hilite = new Map();
+      slides.forEach((s) => s.elements.forEach((e) => {
+        if (e.html) tallyTextColors(String(e.html), e.color || '#222', fore, hilite);
+        else if (e.type === 'table' && e.data) {
+          const c = normColor(e.color || '#222');
+          if (c) fore.set(c, (fore.get(c) || 0) + String(e.data).length);
+        }
+      }));
+      return { fore, hilite };
+    };
+    const cur = tally([Store.slide()]), all = tally(Store.deck.slides);
+    const rank = (key) => [...all[key].keys()].sort((a, b) =>
+      (cur[key].get(b) || 0) - (cur[key].get(a) || 0) || all[key].get(b) - all[key].get(a));
+    return { fore: rank('fore'), hilite: rank('hilite') };
+  }
+
+  // 색 견본을 "본문에서 쓰인 색 → 기본 색" 순서로 다시 채운다
+  function fillTextBarColors(bar) {
+    const used = usedTextColors();
+    const fill = (box, cmd, label, usedColors, presets, tail) => {
+      const front = usedColors.slice(0, cmd === 'foreColor' ? TB_MAX_USED_FORE : TB_MAX_USED_HILITE);
+      const swatch = (c, title) => Panels.h('button', { 'data-cmd': cmd, 'data-val': c, style: `background:${c}`, title });
+      box.replaceChildren(
+        ...front.map((c) => swatch(c, `본문에 쓰인 ${label} ${c}`)),
+        ...(front.length ? [Panels.h('span', { class: 'tb-sep' })] : []),
+        ...presets.filter((c) => !front.includes(c)).map((c) => swatch(c, `${label} ${c}`)),
+        ...tail);
+    };
+    // 맨 앞: 지금 테마의 색 자리 — 이 색으로 칠한 글자는 테마를 바꾸면 새 테마의 같은 자리 색으로 바뀐다
+    const th = theme();
+    const themeFore = TB_THEME_SLOTS.map(([slot, label]) => ({ slot, label, c: normColor(th[slot]) })).filter((x) => x.c);
+    const themeVals = themeFore.map((x) => x.c);
+    const themeBtns = themeFore.map((x) => Panels.h('button', { 'data-cmd': 'foreColor', 'data-val': x.c, 'data-slot': x.slot, class: 'tb-theme', style: `background:${x.c}`, title: `테마 ${x.label} 색 ${x.c} — 테마를 바꾸면 함께 바뀜` }));
+    fill(bar.querySelector('.tb-colors'), 'foreColor', '글자 색', used.fore.filter((c) => !themeVals.includes(c)), TB_FORE_COLORS.filter((c) => !themeVals.includes(c)), []);
+    if (themeBtns.length) bar.querySelector('.tb-colors').prepend(...themeBtns, Panels.h('span', { class: 'tb-sep' }));
+    fill(bar.querySelector('.tb-hl'), 'hiliteColor', '형광펜', used.hilite, TB_HILITE_COLORS, [
+      Panels.h('button', { 'data-cmd': 'hiliteColor', 'data-val': 'transparent', style: 'background:linear-gradient(135deg,#fff 45%,#e03131 50%,#fff 55%)', title: '형광펜 지우기' }),
+    ]);
+  }
+
+  // 커서(또는 선택 영역의 첫 글자)가 놓인 요소
+  function caretElement(tc) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    if (!tc.contains(r.startContainer)) return null;
+    let node = r.startContainer;
+    if (!r.collapsed) {
+      // 선택 영역이면 그 안의 첫 글자를 기준으로 한다
+      const w = document.createTreeWalker(tc, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) {
+        const n = w.currentNode;
+        if (n.nodeValue.trim() && r.intersectsNode(n) && !(n === r.startContainer && r.startOffset >= n.length)) { node = n; break; }
+      }
+    } else if (node.nodeType === 1) {
+      node = node.childNodes[r.startOffset - 1] || node.childNodes[r.startOffset] || node;
+      while (node.nodeType === 1 && node.lastChild) node = node.lastChild;
+    }
+    return node.nodeType === 1 ? node : node.parentElement;
+  }
+
+  // 글자 뒤로 보이는 배경: 요소 채우기 → 슬라이드 배경
+  function backdropOf(tc) {
+    for (let p = tc; p; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.backgroundImage !== 'none') return cs.backgroundImage;
+      if (normColor(cs.backgroundColor)) return cs.backgroundColor;
+      if (p.id === 'canvas') break;
+    }
+    return '#ffffff';
+  }
+
+  // 커서 위치의 글자 색·형광펜을 바에 표시한다: 미리보기 칸 + 해당 견본 테두리
+  function showCaretColors() {
+    const bar = $('#text-bar');
+    if (bar.hidden || !Editor.editing) return;
+    const tc = document.querySelector(`#canvas .hp-el[data-id="${Editor.editing}"] .hp-tc`);
+    const node = tc && caretElement(tc);
+    if (!node) return;
+    const fore = normColor(getComputedStyle(node).color);
+    let hilite = null;
+    for (let p = node; p && p !== tc && !hilite; p = p.parentElement) hilite = normColor(p.style.backgroundColor);
+    const chip = bar.querySelector('.tb-current');
+    const backdrop = backdropOf(tc);
+    bar.style.setProperty('--tb-backdrop', backdrop);
+    chip.style.color = fore || '';
+    chip.style.background = hilite ? `linear-gradient(${hilite}, ${hilite}), ${backdrop}` : backdrop;
+    chip.title = `커서 위치 — 글자 색 ${fore || '알 수 없음'} · 형광펜 ${hilite || '없음'}`;
+    bar.querySelectorAll('.tb-colors button').forEach((b) => b.classList.toggle('tb-on', normColor(b.dataset.val) === fore));
+    bar.querySelectorAll('.tb-hl button').forEach((b) => b.classList.toggle('tb-on', !!hilite && normColor(b.dataset.val) === hilite));
+  }
+
   A.showTextBar = function (id) {
     const bar = $('#text-bar');
+    fillTextBarColors(bar);
     bar.hidden = false;
+    showCaretColors();
+    const ws = $('#stage-wrap').getBoundingClientRect();
+    // 편집 영역보다 넓으면 줄바꿈한다. 이전 위치 때문에 폭이 줄지 않도록 왼쪽 끝에 두고 잰다
+    bar.style.maxWidth = (ws.width - 16) + 'px';
+    bar.style.left = (ws.left + 8) + 'px';
     const d = document.querySelector(`#canvas .hp-el[data-id="${id}"]`);
     if (d) {
       const r = d.getBoundingClientRect();
-      const ws = $('#stage-wrap').getBoundingClientRect();
       bar.style.left = Math.max(ws.left + 8, Math.min(r.left, ws.right - bar.offsetWidth - 8)) + 'px';
       bar.style.top = Math.max(ws.top + 6, r.top - bar.offsetHeight - 10) + 'px';
     }
@@ -1878,15 +2027,13 @@ const App = (() => {
       if (cmd === 'magic') { const id = Editor.editing; A.magicMoveFrom(id); return; }
       if (cmd === 'foreColor' || cmd === 'hiliteColor') document.execCommand('styleWithCSS', false, true);
       document.execCommand(cmd, false, val || null);
+      if (cmd === 'foreColor') {
+        const tc = document.querySelector(`#canvas .hp-el[data-id="${Editor.editing}"] .hp-tc`);
+        if (tc) tagThemeColors(tc, b.dataset.slot || null, normColor(val));
+      }
+      showCaretColors();
     });
-    const sw = bar.querySelector('.tb-colors');
-    ['#000000', '#ffffff', '#e03131', '#f08c00', '#ffd43b', '#2f9e44', '#1971c2', '#7048e8', '#e64980', '#868e96'].forEach((c) => {
-      sw.appendChild(Panels.h('button', { 'data-cmd': 'foreColor', 'data-val': c, style: `background:${c}`, title: '글자 색 ' + c }));
-    });
-    const hl = bar.querySelector('.tb-hl');
-    ['#fff3bf', '#d3f9d8', '#d0ebff', '#ffdeeb', 'transparent'].forEach((c) => {
-      hl.appendChild(Panels.h('button', { 'data-cmd': 'hiliteColor', 'data-val': c, style: `background:${c === 'transparent' ? 'linear-gradient(135deg,#fff 45%,#e03131 50%,#fff 55%)' : c}`, title: '형광펜' }));
-    });
+    document.addEventListener('selectionchange', showCaretColors);
   }
 
   function fontSizeSel(delta) {

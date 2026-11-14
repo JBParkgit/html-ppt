@@ -52,6 +52,7 @@ button { cursor: pointer; }
 .tb-btn:disabled { opacity: .35; cursor: default; background: none; }
 .tb-btn.icon { font-size: 16px; padding: 4px 8px; }
 .tb-btn.zoom { min-width: 54px; font-variant-numeric: tabular-nums; }
+.tb-btn.fit.on { background: rgba(116,192,252,.18); color: #74c0fc; }
 .split { display: flex; }
 .tb-btn.present { background: #e8590c; font-weight: 700; border-radius: 6px 0 0 6px; padding: 6px 14px; }
 .tb-btn.present.more { border-radius: 0 6px 6px 0; padding: 6px 8px; border-left: 1px solid rgba(0,0,0,.2); }
@@ -278,13 +279,19 @@ body.previewing #sel-layer { display: none; }
 .toast.out { opacity: 0; }
 
 /* 인라인 텍스트 도구막대 */
-.text-bar { position: fixed; z-index: 15000; display: flex; align-items: center; gap: 2px; padding: 4px 6px; background: #1d2230; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.3); color: #fff; }
+.text-bar { position: fixed; z-index: 15000; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; background: rgba(29,34,48,.68); backdrop-filter: blur(8px); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.3); color: #fff; }
 .text-bar[hidden] { display: none; }
-.text-bar button { border: 0; background: none; color: #fff; padding: 4px 7px; border-radius: 5px; font-size: 12px; }
+.text-bar button { border: 0; background: none; color: #fff; min-height: 34px; min-width: 34px; padding: 6px 10px; border-radius: 6px; font-size: 15px; }
 .text-bar button:hover { background: rgba(255,255,255,.15); }
-.tb-sep { width: 1px; height: 18px; background: rgba(255,255,255,.2); margin: 0 3px; }
-.tb-colors, .tb-hl { display: flex; gap: 2px; }
-.tb-colors button, .tb-hl button { width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); }
+.tb-sep { width: 1px; height: 26px; background: rgba(255,255,255,.2); margin: 0 4px; }
+/* 색을 슬라이드에서와 같은 조건으로 보이도록 견본 뒤에 글자 뒤 배경을 깐다 (반투명 형광펜도 실제 색으로 보인다) */
+.tb-colors, .tb-hl { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 8px; background: var(--tb-backdrop, #fff); }
+.tb-colors .tb-sep, .tb-hl .tb-sep { background: rgba(0,0,0,.25); }
+.tb-colors button, .tb-hl button { position: relative; width: 26px; height: 26px; min-width: 0; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid rgba(0,0,0,.28); transition: transform .12s ease-out, box-shadow .12s ease-out; }
+.tb-colors button:hover, .tb-hl button:hover { z-index: 1; transform: scale(1.8); border-color: rgba(0,0,0,.45); box-shadow: 0 3px 10px rgba(0,0,0,.55); }
+.tb-colors button.tb-on, .tb-hl button.tb-on { border-color: var(--tb-backdrop, #fff); box-shadow: 0 0 0 2px #1d2230; }
+.tb-colors button.tb-theme { border-radius: 6px; }
+.tb-current { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 38px; height: 34px; margin-right: 4px; border-radius: 6px; border: 2px solid #fff; font-family: 'Noto Sans KR', sans-serif; font-size: 20px; font-weight: 700; line-height: 1; cursor: default; }
 
 body.presenting > *:not(.hp-pres):not(#toasts) { visibility: hidden; }
 

@@ -7,6 +7,8 @@
  *      GET  /api/deck             { rev, source, deck }
  *      PUT  /api/deck             { deck, source, baseRev? }  → { rev }   (baseRev 불일치 시 409)
  *      POST /api/command          { cmd: { type: 'goto'|'present'|'stop'|'next'|'prev', slide? } }
+ *      GET  /api/selection        { selection, editorOnline }   편집기에서 지금 선택한 슬라이드·개체·글자
+ *      POST /api/selection        { source, slideId, slide, ids, text }   (편집기가 선택이 바뀔 때 보냄, 메모리에만 보관)
  *      GET  /api/decks            { files: [{ path, size, mtime }] }  decks 폴더의 덱 파일 목록 (파일 ▸ 열기)
  *      GET  /api/media            { ids: [...] }       편집기가 브라우저(IndexedDB)에 넣은 미디어의 백업 목록
  *      PUT  /api/media/<id>       (파일 내용)            → decks/media/<id>.<확장자> 로 백업
@@ -40,7 +42,8 @@ const TYPES = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
 };
 
-let state = { rev: 0, source: '', deck: null, cmdSeq: 0, cmd: null, updatedAt: null };
+let state = { rev: 0, source: '', deck: null, cmdSeq: 0, cmd: null, updatedAt: null, selection: null, editorSeenAt: 0 };
+const EDITOR_ONLINE_MS = 5000; // 편집기는 1.2초마다 폴링한다
 try {
   const saved = JSON.parse(fs.readFileSync(DECK_FILE, 'utf8'));
   state.deck = saved.deck || null;
@@ -122,7 +125,17 @@ function readBody(req, limit) {
 async function api(req, res, url) {
   const p = url.pathname;
   if (p === '/api/state' && req.method === 'GET') {
-    return send(res, 200, { rev: state.rev, source: state.source, cmdSeq: state.cmdSeq, cmd: state.cmd, updatedAt: state.updatedAt, slides: state.deck ? state.deck.slides.length : 0 });
+    if (url.searchParams.has('editor')) state.editorSeenAt = Date.now();
+    return send(res, 200, { rev: state.rev, source: state.source, cmdSeq: state.cmdSeq, cmd: state.cmd, updatedAt: state.updatedAt, slides: state.deck ? state.deck.slides.length : 0, hasSelection: !!state.selection });
+  }
+  if (p === '/api/selection' && req.method === 'GET') {
+    return send(res, 200, { selection: state.selection, editorOnline: Date.now() - state.editorSeenAt < EDITOR_ONLINE_MS });
+  }
+  if (p === '/api/selection' && req.method === 'POST') {
+    let data;
+    try { data = JSON.parse(await readBody(req, 1024 * 64)); } catch (e) { return send(res, 400, { error: 'invalid json' }); }
+    state.selection = { source: String(data.source || ''), slideId: String(data.slideId || ''), slide: +data.slide || 0, ids: Array.isArray(data.ids) ? data.ids.map(String) : [], text: String(data.text || ''), at: Date.now() };
+    return send(res, 200, { ok: true });
   }
   if (p === '/api/deck' && req.method === 'GET') {
     return send(res, 200, { rev: state.rev, source: state.source, updatedAt: state.updatedAt, deck: state.deck });

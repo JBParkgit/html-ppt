@@ -24,10 +24,84 @@ const Editor = (() => {
     wrap.addEventListener('drop', onDrop);
     wrap.addEventListener('wheel', (e) => {
       if (orbitWheel(e)) return;
-      if (!e.ctrlKey) return;
+      if (!e.ctrlKey) { wheelNav(e); return; }
       e.preventDefault();
       E.setZoom(Math.max(0.1, Math.min(3, E.scale * (e.deltaY < 0 ? 1.1 : 0.9))));
     }, { passive: false });
+    // 휠: 화면이 확대되어 슬라이드가 창보다 크면 먼저 스크롤한다.
+    //      끝에 닿은 뒤 같은 방향으로 한 칸 더 굴리면 "한 번 더 굴리면 다음 슬라이드" 안내가 뜨고,
+    //      한 칸 더(천천히 굴려도 2초 안이면) 굴리면 이전/다음 슬라이드로 넘어간다.
+    //      넘어간 슬라이드는 이어 읽기 좋게 위(또는 아래) 끝에서 시작한다.
+    //      세로 여유가 없고 가로만 넘치면 휠을 가로 스크롤로 쓴다(Shift + 휠도 가로). 슬라이드가 다 보이면 바로 넘김.
+    let wheelLock = 0, edgeAcc = 0, edgeTicks = 0, edgeDir = 0, edgeTime = 0;
+    const EDGE_TICKS = 2;     // 끝에서 더 굴려야 하는 휠 칸 수(마우스)
+    const EDGE_PUSH = 200;    // 터치패드처럼 잘게 오는 휠은 이만큼(px) 모이면 넘김
+    const EDGE_WINDOW = 2000; // 이 시간(ms) 안에 이어서 굴려야 한 동작으로 본다 — 한 칸씩 천천히 굴려도 넘어가게
+    function wheelNav(e) {
+      if (E.editing || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      const down = e.deltaY > 0;
+      const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? wrap.clientHeight : 1;
+      const delta = e.deltaY * unit;
+      // 화면 맞춤(overflow: hidden)에서는 여백(padding) 때문에 scrollHeight 가 몇십 px 커도 스크롤할 수 없으므로 넘침으로 보지 않는다
+      const scrollable = E.zoom !== 'fit';
+      const overY = scrollable && wrap.scrollHeight > wrap.clientHeight + 1;
+      const overX = scrollable && wrap.scrollWidth > wrap.clientWidth + 1;
+      const now = Date.now();
+      if (overY || overX) {
+        const horiz = !overY || e.shiftKey;
+        const canScroll = horiz
+          ? (down ? wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1 : wrap.scrollLeft > 0)
+          : (down ? wrap.scrollTop + wrap.clientHeight < wrap.scrollHeight - 1 : wrap.scrollTop > 0);
+        if (canScroll) {
+          edgeAcc = 0; edgeTicks = 0; edgeHint(0);
+          if (horiz) { e.preventDefault(); wrap.scrollLeft += delta; }
+          return; // 세로 스크롤은 브라우저 기본 동작
+        }
+        e.preventDefault();
+        if (now < wheelLock) return;
+        if (edgeDir !== (down ? 1 : -1) || now - edgeTime > EDGE_WINDOW) { edgeAcc = 0; edgeTicks = 0; }
+        edgeDir = down ? 1 : -1; edgeTime = now;
+        edgeAcc += Math.abs(delta);
+        if (Math.abs(delta) >= 40) edgeTicks++;
+        const n = Store.cur + (down ? 1 : -1);
+        if (n < 0 || n >= Store.deck.slides.length) return; // 첫/마지막 슬라이드
+        if (edgeTicks < EDGE_TICKS && edgeAcc < EDGE_PUSH) { edgeHint(down ? 1 : -1); return; }
+        edgeAcc = 0; edgeTicks = 0; edgeHint(0);
+        go(down, horiz);
+        return;
+      }
+      e.preventDefault();
+      if (now < wheelLock) return;
+      go(down, false);
+    }
+    // 끝에 닿았을 때 화면 아래(위)쪽에 잠깐 뜨는 안내
+    let hintEl = null, hintTimer = 0;
+    function edgeHint(dir) {
+      clearTimeout(hintTimer);
+      if (!dir) { if (hintEl) hintEl.style.opacity = '0'; return; }
+      if (!hintEl) {
+        hintEl = document.createElement('div');
+        Object.assign(hintEl.style, { position: 'fixed', zIndex: 9000, padding: '7px 14px', borderRadius: '16px', background: 'rgba(20,24,34,.82)', color: '#fff', font: '13px/1.2 sans-serif', pointerEvents: 'none', transition: 'opacity .2s', opacity: '0', transform: 'translateX(-50%)' });
+        document.body.appendChild(hintEl);
+      }
+      const r = wrap.getBoundingClientRect();
+      hintEl.textContent = dir > 0 ? '↓ 한 번 더 굴리면 다음 슬라이드' : '↑ 한 번 더 굴리면 이전 슬라이드';
+      hintEl.style.left = (r.left + r.width / 2) + 'px';
+      hintEl.style.top = dir > 0 ? (r.bottom - 48) + 'px' : (r.top + 16) + 'px';
+      hintEl.style.opacity = '1';
+      hintTimer = setTimeout(() => edgeHint(0), EDGE_WINDOW);
+    }
+    function go(down, horiz) {
+      wheelLock = Date.now() + 450;
+      const n = Store.cur + (down ? 1 : -1);
+      if (n < 0 || n >= Store.deck.slides.length) return;
+      Store.goto(n);
+      requestAnimationFrame(() => {
+        if (E.zoom === 'fit') { wrap.scrollTop = 0; wrap.scrollLeft = 0; return; }
+        if (horiz) wrap.scrollLeft = down ? 0 : wrap.scrollWidth;
+        else wrap.scrollTop = down ? 0 : wrap.scrollHeight;
+      });
+    }
     canvas.addEventListener('focusout', onFocusOut);
     canvas.addEventListener('keydown', (e) => { if (e.key === 'Escape' && E.editing) { e.preventDefault(); document.activeElement.blur(); } });
   };
@@ -54,6 +128,7 @@ const Editor = (() => {
     if (!deck) return;
     let s;
     wrap.style.overflow = E.zoom === 'fit' ? 'hidden' : 'auto';
+    if (E.zoom === 'fit') { wrap.scrollTop = 0; wrap.scrollLeft = 0; } // 확대 때 스크롤했던 위치가 숨은 채로 남지 않게
     if (E.zoom === 'fit') {
       const pad = 50;
       s = Math.min((wrap.clientWidth - pad) / deck.width, (wrap.clientHeight - pad) / deck.height);
@@ -66,6 +141,8 @@ const Editor = (() => {
     layer.style.setProperty('--inv', 1 / s);
     const zl = document.getElementById('zoom-label');
     if (zl) zl.textContent = Math.round(s * 100) + '%';
+    const zf = document.getElementById('btn-zoom-fit');
+    if (zf) zf.classList.toggle('on', E.zoom === 'fit');
     if (window.Pen && Pen.mode) Pen.redraw();
   };
 

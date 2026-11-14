@@ -547,6 +547,33 @@ function runOps(deck, ops) {
 /* ------------------------------------------------------------------ */
 /* 출력                                                                 */
 /* ------------------------------------------------------------------ */
+function elementLine(e, j) {
+  const t = e.html ? htmlToText(e.html).replace(/\n/g, ' ⏎ ').slice(0, 60) : e.src || e.url || (e.data ? e.data.split('\n')[0] + '…' : '');
+  const extra = [e.role && 'role:' + e.role, e.mkey && 'key:' + e.mkey, e.action && e.action.type !== 'none' && 'action:' + e.action.type, e.startHidden && 'startHidden', e.hover && 'hover:' + e.hover].filter(Boolean).join(' ');
+  return `   [${j}] ${e.id} ${e.type}${e.shape ? '/' + e.shape : ''}${e.chartType ? '/' + e.chartType : ''} (${e.x},${e.y} ${e.w}×${e.h}) ${extra}  ${t}`;
+}
+
+// 편집기에서 지금 선택한 것을 사람이 읽을 수 있게 정리한다. 슬라이드는 id 로 찾으므로 순서가 바뀌어도 맞다
+function selectionReport(deck, data) {
+  const sel = data.selection;
+  if (!sel) return '선택 정보 없음 — 편집기를 열거나 새로고침한 뒤 다시 선택하세요.';
+  const lines = [];
+  const age = Math.round((Date.now() - sel.at) / 1000);
+  lines.push(`편집기: ${data.editorOnline ? '연결됨' : '연결 안 됨 (아래 정보는 오래됐을 수 있음)'} · ${age}초 전 선택`);
+  const i = deck.slides.findIndex((s) => s.id === sel.slideId);
+  if (i < 0) { lines.push('선택했던 슬라이드가 덱에 없습니다.'); return lines.join('\n'); }
+  const s = deck.slides[i];
+  const ttl = s.elements.find((e) => e.role === 'title' && e.html);
+  lines.push(`슬라이드 #${i + 1} [${s.layout || 'custom'}]${ttl ? ' “' + htmlToText(ttl.html).replace(/\n/g, ' ').slice(0, 50) + '”' : ''}`);
+  if (!sel.ids.length) lines.push('선택한 개체 없음');
+  sel.ids.forEach((id) => {
+    const j = s.elements.findIndex((e) => e.id === id);
+    lines.push(j < 0 ? `   ${id} — 덱에 없는 개체` : elementLine(s.elements[j], j));
+  });
+  if (sel.text) lines.push(`선택한 글자: “${sel.text}”`);
+  return lines.join('\n');
+}
+
 function summary(deck, only) {
   const X = engine();
   const lines = [];
@@ -563,11 +590,7 @@ function summary(deck, only) {
       lines.push(`   배경: ${JSON.stringify(s.bg)}`);
       if (s.notes) lines.push(`   노트: ${s.notes.slice(0, 120)}`);
       if (s.dimPrev) lines.push('   지난 항목 흐리게: 켬 (dimPrev)');
-      s.elements.forEach((e, j) => {
-        const t = e.html ? htmlToText(e.html).replace(/\n/g, ' ⏎ ').slice(0, 60) : e.src || e.url || (e.data ? e.data.split('\n')[0] + '…' : '');
-        const extra = [e.role && 'role:' + e.role, e.mkey && 'key:' + e.mkey, e.action && e.action.type !== 'none' && 'action:' + e.action.type, e.startHidden && 'startHidden', e.hover && 'hover:' + e.hover].filter(Boolean).join(' ');
-        lines.push(`   [${j}] ${e.id} ${e.type}${e.shape ? '/' + e.shape : ''}${e.chartType ? '/' + e.chartType : ''} (${e.x},${e.y} ${e.w}×${e.h}) ${extra}  ${t}`);
-      });
+      s.elements.forEach((e, j) => lines.push(elementLine(e, j)));
       (s.anims || []).forEach((a, j) => {
         const k = s.elements.findIndex((e) => e.id === a.elId);
         lines.push(`   anim${j}: [${k}] ${a.effect} ${a.trigger} ${a.duration}ms${a.delay ? ' +' + a.delay : ''}${a.dim ? ' dim' : ''}${a.drawFx ? ' fx:' + a.drawFx : ''}${a.drawDir ? ' dir:' + a.drawDir : ''}`);
@@ -798,6 +821,7 @@ const HELP = `slide-studio CLI (앱 경로: ${ROOT}, 서버: ${URL_BASE})
   status                      서버/덱 상태
   catalog [종류]              themes | layouts | anims | transitions | fx | shapes | actions | charts | codeLangs | music | fonts | aspects | hovers
   show [n]                    덱 요약 / n번 슬라이드 상세(요소 id·좌표·애니메이션)
+  selection                   편집기에서 지금 선택한 슬라이드·개체·글자
   get [--out file]            덱 전체 JSON
   build <spec.json> [--append] [--at n] [--no-goto]   사양으로 덱 생성(기본: 교체)
   --file <deck.hppt.json>     (모든 명령) 실시간 덱 대신 별도 덱 파일을 대상으로 — 기존 덱을 건드리지 않음
@@ -865,6 +889,18 @@ async function main() {
       const cur = await readDeck();
       if (!cur.deck) { console.log('덱 없음'); return; }
       console.log(summary(cur.deck, pos[0] ? +pos[0] : null));
+      return;
+    }
+
+    case 'selection': {
+      let data;
+      try {
+        const r = await fetch(URL_BASE + '/api/selection', { signal: AbortSignal.timeout(3000) });
+        if (r.status === 404) { console.log('서버가 이 기능을 모릅니다 — 서버를 다시 시작하고 편집기를 새로고침하세요.'); process.exitCode = 1; return; }
+        data = await r.json();
+      } catch (e) { console.log('서버가 꺼져 있어 선택을 알 수 없습니다. (start 먼저)'); process.exitCode = 1; return; }
+      const cur = await readDeck();
+      console.log(selectionReport(cur.deck, data));
       return;
     }
 
