@@ -1785,17 +1785,34 @@ const App = (() => {
   A.makeVideo = function () {
     const d = Store.deck;
     const total = d.slides.reduce((s, sl) => s + (sl.duration || d.autoDuration || 5), 0);
+    // 기본은 '직접 넘기며 녹화' — 말하는 속도에 맞춰 사람이 →/Space 로 넘긴다. 자동 재생 녹화는 골랐을 때만.
+    let mode = 'manual';
+    const last = Panels.h('li', null, '');
+    const setMode = (m) => {
+      mode = m;
+      last.textContent = m === 'auto'
+        ? '자동 재생이 끝나면 녹화가 멈추고 파일이 다운로드됩니다. (중간에 R 키로 정지 가능)'
+        : '→ / Space 로 넘기며 진행하세요. 끝나면 R 키 또는 Esc 로 녹화를 멈추면 파일이 다운로드됩니다.';
+    };
+    const opt = (m, title, desc) => Panels.h('label', { style: 'display:block;margin:8px 0;cursor:pointer' },
+      Panels.h('input', { type: 'radio', name: 'hp-vid-mode', value: m, checked: m === 'manual', onchange: () => setMode(m) }),
+      ' ', Panels.h('b', null, title),
+      Panels.h('div', { class: 'p-hint', style: 'margin:2px 0 0 22px' }, desc));
+    setMode('manual');
     const body = Panels.h('div', { class: 'form' },
-      Panels.h('p', null, `슬라이드 ${d.slides.length}장을 자동 재생하면서 화면을 녹화해 동영상(WebM) 파일로 저장합니다. 예상 길이: 약 ${Math.round(total)}초 + 애니메이션 시간`),
+      Panels.h('p', null, `슬라이드 ${d.slides.length}장을 발표하면서 화면을 녹화해 동영상(WebM) 파일로 저장합니다.`),
+      opt('manual', '직접 넘기며 녹화 (기본)', '발표하듯 →/Space 로 넘기는 대로 진행합니다. 말하는 속도에 맞출 때.'),
+      opt('auto', '자동 재생으로 녹화', `슬라이드마다 정한 시간이 지나면 저절로 넘어갑니다. 예상 길이: 약 ${Math.round(total)}초 + 애니메이션 시간`),
       Panels.h('ol', { class: 'p-list' },
         Panels.h('li', null, '[녹화 시작]을 누르면 화면 공유 창이 나타납니다.'),
-        Panels.h('li', null, '"이 탭" (현재 탭)을 선택하고 [공유]를 누르세요. 소리를 넣으려면 "탭 오디오 공유"를 켜세요.'),
-        Panels.h('li', null, '자동 재생이 끝나면 녹화가 멈추고 파일이 다운로드됩니다. (중간에 R 키로 정지 가능)')),
-      Panels.h('p', { class: 'p-hint' }, '슬라이드별 표시 시간은 [슬라이드] 탭 → 자동 재생에서 바꿀 수 있습니다. Chrome / Edge 권장.'));
+        Panels.h('li', null, '"이 탭" (현재 탭)을 선택하고 [공유]를 누르세요. 소리를 넣으려면 "탭 오디오 공유"를 켜세요. 🎙 마이크가 켜져 있으면 목소리도 함께 녹음됩니다.'),
+        last),
+      Panels.h('p', { class: 'p-hint' }, '녹화 중에는 아래 컨트롤 막대와 커서가 영상에 찍히지 않습니다. 자동 재생 시간은 [슬라이드] 탭 → 자동 재생에서 바꿀 수 있습니다. Chrome / Edge 권장.'));
     UI.modal('🎬 동영상으로 만들기', body, [['취소', () => true], ['녹화 시작', () => {
+      const auto = mode === 'auto';
       const p = A.present(0, { noFullscreen: true });
       p.toggleRecord().then(() => {
-        if (p.recorder) { setTimeout(() => { p.go(0, 0, true); p.toggleAuto(true); }, 600); }
+        if (p.recorder) { setTimeout(() => { p.go(0, 0, true); if (auto) p.toggleAuto(true); }, 600); }
       });
       return true;
     }, 'primary']]);
