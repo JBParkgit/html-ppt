@@ -2263,6 +2263,9 @@ function PlayerCore() {
       this.editMode = false;
       this.laser = false;
       this.recorder = null;
+      // 녹화 때 마이크(목소리)도 함께 녹음할지 — 기본 켜짐, 브라우저에 기억
+      this.recMic = true;
+      try { this.recMic = localStorage.getItem('hppt.recMic') !== '0'; } catch (e) { /* 저장소 막힘 */ }
       this._bgmPlayers = [];
       this.bgmMuted = false;
       this._ducked = false;
@@ -2474,6 +2477,7 @@ function PlayerCore() {
           <span class="hp-sep"></span>
           <button data-a="auto" title="자동 재생 (A)">⏵ 자동</button>
           <button data-a="rec" title="화면 녹화 → 동영상 저장 (R)">● 녹화</button>
+          <button data-a="mic" title="녹화할 때 마이크(목소리)도 함께 녹음 — 다음 녹화부터 적용">🎙 마이크</button>
           <button data-a="bgm" title="배경음악 켜기/끄기 (M)" hidden>🎵 음악</button>
           <button data-a="pv" title="발표자 보기 창 (P) — 현재·다음 슬라이드, 노트, 타이머">🖥 발표자 보기</button>
           <button data-a="notes" title="발표자 노트 (N)">노트</button>
@@ -2505,6 +2509,7 @@ function PlayerCore() {
         else if (a === 'next') this.next();
         else if (a === 'auto') this.toggleAuto();
         else if (a === 'rec') this.toggleRecord();
+        else if (a === 'mic') this.toggleRecMic();
         else if (a === 'notes') this.toggleNotes();
         else if (a === 'pv') this.openPresenterView();
         else if (a === 'bgm') this.toggleMusic();
@@ -2958,6 +2963,9 @@ function PlayerCore() {
       notes.innerHTML = slide && slide.notes ? esc(slide.notes).replace(/\n/g, '<br>') : '<i>노트 없음</i>';
       this.el.querySelector('[data-a="auto"]').classList.toggle('on', this.auto);
       this.el.querySelector('[data-a="rec"]').classList.toggle('on', !!this.recorder);
+      this.el.querySelector('[data-a="mic"]').classList.toggle('on', !!this.recMic);
+      // 녹화 중에는 컨트롤 막대·커서·노트·알림이 영상에 찍히지 않게 숨긴다 (정지: R 키 또는 브라우저의 '공유 중지')
+      this.el.classList.toggle('hp-recording', !!this.recorder);
       this.el.querySelector('[data-a="laser"]').classList.toggle('on', this.laser);
       this.el.querySelector('[data-a="zoom"]').classList.toggle('on', !!this._zoomOn);
       this.el.querySelector('[data-a="ov"]').classList.toggle('on', !!this._ov);
@@ -3256,6 +3264,13 @@ function PlayerCore() {
       return true;
     }
 
+    toggleRecMic() {
+      this.recMic = !this.recMic;
+      try { localStorage.setItem('hppt.recMic', this.recMic ? '1' : '0'); } catch (e) { /* ignore */ }
+      this._updateUI();
+      this._toast(this.recMic ? '🎙 녹화할 때 마이크 목소리도 함께 녹음합니다' : '🎙 마이크 끔 — 화면(과 탭 소리)만 녹화합니다');
+    }
+
     async toggleRecord() {
       if (this.recorder) { this.recorder.stop(); return; }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { this._toast('이 브라우저는 화면 녹화를 지원하지 않습니다'); return; }
@@ -3264,17 +3279,35 @@ function PlayerCore() {
           video: { frameRate: 30, displaySurface: 'browser' }, audio: true,
           preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude',
         });
+        // 마이크(목소리) — 화면 선택 뒤에 묻는다 (화면 공유 요청은 클릭 직후여야 해서)
+        let mic = null;
+        if (this.recMic && navigator.mediaDevices.getUserMedia) {
+          try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch (e) { mic = null; }
+        }
         let recStream = stream;
+        const tabAudio = stream.getAudioTracks().length > 0;
         const hasBgm = !!(this.deck.bgm && this.deck.bgm.tracks && this.deck.bgm.tracks.length);
-        if (!stream.getAudioTracks().length && (hasBgm || (this.cur && this.cur.querySelector('video:not(.hp-bgvideo)')))) {
+        const hasVideo = !!(this.cur && this.cur.querySelector('video:not(.hp-bgvideo)'));
+        if (mic || (!tabAudio && (hasBgm || hasVideo))) {
           try {
             const AC = window.AudioContext || window.webkitAudioContext;
             const ctx = this._recCtx || (this._recCtx = new AC());
             if (ctx.state === 'suspended') ctx.resume();
-            this._recMix = { ctx, dest: ctx.createMediaStreamDestination() };
-            this._bgmPlayers.forEach((x) => this._recConnect(x.audio));
-            if (this.cur) this.cur.querySelectorAll('video:not(.hp-bgvideo)').forEach((v) => this._recConnect(v));
-            recStream = new MediaStream([...stream.getVideoTracks(), ...this._recMix.dest.stream.getAudioTracks()]);
+            const dest = ctx.createMediaStreamDestination();
+            const srcs = [];
+            if (tabAudio) {
+              // 탭 소리를 그대로 섞는다 (배경음악·동영상 소리가 이미 들어 있으므로 따로 연결하지 않음)
+              const ts = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+              ts.connect(dest); srcs.push(ts);
+            } else {
+              this._recMix = { ctx, dest };
+              this._bgmPlayers.forEach((x) => this._recConnect(x.audio));
+              if (this.cur) this.cur.querySelectorAll('video:not(.hp-bgvideo)').forEach((v) => this._recConnect(v));
+            }
+            // 마이크는 녹화 파일에만 넣고 스피커로는 내보내지 않는다 (울림 방지)
+            if (mic) { const ms = ctx.createMediaStreamSource(mic); ms.connect(dest); srcs.push(ms); }
+            this._recSrcs = srcs;
+            recStream = new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
           } catch (e) { this._recMix = null; }
         }
         const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
@@ -3283,6 +3316,9 @@ function PlayerCore() {
         rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => {
           stream.getTracks().forEach((t) => t.stop());
+          if (mic) mic.getTracks().forEach((t) => t.stop());
+          (this._recSrcs || []).forEach((n) => { try { n.disconnect(); } catch (e) { /* ignore */ } });
+          this._recSrcs = null;
           this._recMix = null;
           this.recorder = null;
           this._updateUI();
@@ -3291,7 +3327,7 @@ function PlayerCore() {
           a.href = URL.createObjectURL(blob);
           a.download = (this.deck.title || 'presentation') + (blob.type.includes('mp4') ? '.mp4' : '.webm');
           document.body.appendChild(a); a.click(); a.remove();
-          this._toast('동영상이 저장되었습니다');
+          this._toast(mic ? '동영상이 저장되었습니다 (마이크 목소리 포함)' : (this.recMic ? '동영상이 저장되었습니다 — 마이크를 쓸 수 없어 목소리는 빠졌습니다 (주소창의 마이크 권한을 확인하세요)' : '동영상이 저장되었습니다'));
         };
         stream.getVideoTracks()[0].addEventListener('ended', () => { if (this.recorder) this.recorder.stop(); });
         rec.start(500);
@@ -3446,6 +3482,7 @@ function PlayerCore() {
 .hp-move[hidden]{display:none}.hp-move button{font:inherit;border:0;border-radius:8px;padding:8px 14px;background:#4dabf7;color:#fff;cursor:pointer}.hp-move button[data-x]{background:transparent;padding:8px}
 .hp-viewport.hp-zooming{transition:transform .35s cubic-bezier(.3,.7,.3,1)}
 .hp-zoom-armed .hp-viewport,.hp-zoom-armed .hp-viewport *{cursor:zoom-in!important}.hp-zoomed .hp-viewport,.hp-zoomed .hp-viewport *{cursor:zoom-out!important}
+.hp-recording .hp-controls,.hp-recording .hp-toast,.hp-recording .hp-notes,.hp-recording .hp-goto,.hp-recording .hp-move,.hp-recording .hp-laser{display:none!important}.hp-recording .hp-viewport,.hp-recording .hp-viewport *{cursor:none!important}
 .hp-looping .hp-controls{display:none}.hp-looping .hp-viewport,.hp-looping .hp-viewport *{cursor:none!important}
 .hp-laser{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle,#ff2a2a 0 35%,rgba(255,40,40,.35) 60%,transparent 70%);pointer-events:none;display:none;z-index:13}
 .hp-laser-on .hp-laser{display:block}.hp-laser-on .hp-viewport{cursor:none}
