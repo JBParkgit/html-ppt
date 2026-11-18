@@ -2464,6 +2464,7 @@ function PlayerCore() {
       r.className = 'hp-pres';
       r.innerHTML = `
         <div class="hp-viewport"><div class="hp-frame"></div></div>
+        <div class="hp-cropbox"></div>
         <div class="hp-blank"></div>
         <div class="hp-laser"></div>
         <div class="hp-notes" hidden></div>
@@ -2576,6 +2577,12 @@ function PlayerCore() {
       const s = Math.min(vw / this.deck.width, vh / this.deck.height);
       this.scale = s;
       this.frame.style.transform = `translate(${(vw - this.deck.width * s) / 2}px, ${(vh - this.deck.height * s) / 2}px) scale(${s})`;
+      // 녹화 때 이 영역만 잘라 녹화한다 (가장자리 검은 줄이 생기지 않게 안쪽으로 반올림)
+      const cb = this.el && this.el.querySelector('.hp-cropbox');
+      if (cb) {
+        const l = Math.ceil((vw - this.deck.width * s) / 2), t = Math.ceil((vh - this.deck.height * s) / 2);
+        Object.assign(cb.style, { left: l + 'px', top: t + 'px', width: (Math.floor(this.deck.width * s) - 1) + 'px', height: (Math.floor(this.deck.height * s) - 1) + 'px' });
+      }
     }
 
     _toast(msg) {
@@ -2951,6 +2958,7 @@ function PlayerCore() {
     _tick() {
       const s = Math.floor((Date.now() - this.startedAt) / 1000);
       this.el.querySelector('.hp-timer').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+      this._recLabel();
       this._pvTick(s);
     }
 
@@ -2963,6 +2971,7 @@ function PlayerCore() {
       notes.innerHTML = slide && slide.notes ? esc(slide.notes).replace(/\n/g, '<br>') : '<i>노트 없음</i>';
       this.el.querySelector('[data-a="auto"]').classList.toggle('on', this.auto);
       this.el.querySelector('[data-a="rec"]').classList.toggle('on', !!this.recorder);
+      this._recLabel();
       this.el.querySelector('[data-a="mic"]').classList.toggle('on', !!this.recMic);
       // 녹화 중에는 컨트롤 막대·커서·노트·알림이 영상에 찍히지 않게 숨긴다 (정지: R 키 또는 브라우저의 '공유 중지')
       this.el.classList.toggle('hp-recording', !!this.recorder);
@@ -3264,6 +3273,14 @@ function PlayerCore() {
       return true;
     }
 
+    _recLabel() {
+      const b = this.el && this.el.querySelector('[data-a="rec"]');
+      if (!b) return;
+      if (!this.recorder || !this._recStart) { b.textContent = '● 녹화'; return; }
+      const t = Math.floor((Date.now() - this._recStart) / 1000);
+      b.textContent = '■ 녹화 정지 ' + String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+    }
+
     toggleRecMic() {
       this.recMic = !this.recMic;
       try { localStorage.setItem('hppt.recMic', this.recMic ? '1' : '0'); } catch (e) { /* ignore */ }
@@ -3276,9 +3293,21 @@ function PlayerCore() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { this._toast('이 브라우저는 화면 녹화를 지원하지 않습니다'); return; }
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: 30, displaySurface: 'browser' }, audio: true,
+          // 해상도: 화면의 실제 픽셀 크기로 요청한다 (작게 잡히거나, 고해상도 화면에서 줄어들지 않게)
+          video: { frameRate: 30, displaySurface: 'browser', width: { ideal: Math.round(screen.width * (window.devicePixelRatio || 1)) }, height: { ideal: Math.round(screen.height * (window.devicePixelRatio || 1)) } }, audio: true,
           preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude',
         });
+        // 지금 탭을 녹화하면 슬라이드 영역만 잘라 녹화한다 (Region Capture).
+        // 그러면 아래 띠의 녹화 컨트롤러는 화면에 보이지만 영상에는 찍히지 않는다. 안 되면 컨트롤러를 숨기고 녹화.
+        const vt = stream.getVideoTracks()[0];
+        this.el.classList.remove('hp-rec-crop');
+        if (window.CropTarget && vt && vt.cropTo) {
+          try {
+            this.el.classList.add('hp-rec-crop');
+            this._fit();
+            await vt.cropTo(await CropTarget.fromElement(this.el.querySelector('.hp-cropbox')));
+          } catch (e) { this.el.classList.remove('hp-rec-crop'); this._fit(); }
+        }
         // 마이크(목소리) — 화면 선택 뒤에 묻는다 (화면 공유 요청은 클릭 직후여야 해서)
         let mic = null;
         if (this.recMic && navigator.mediaDevices.getUserMedia) {
@@ -3310,8 +3339,9 @@ function PlayerCore() {
             recStream = new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
           } catch (e) { this._recMix = null; }
         }
+        // WebM(VP9) 을 먼저 쓴다 — 크롬의 MP4 녹화는 잘라 녹화와 함께 쓰면 화면이 깨지는 경우가 있었다 (2026-11 시험)
         const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
-        const rec = new MediaRecorder(recStream, mime ? { mimeType: mime, videoBitsPerSecond: 8e6 } : undefined);
+        const rec = new MediaRecorder(recStream, mime ? { mimeType: mime, videoBitsPerSecond: 12e6, audioBitsPerSecond: 192e3 } : undefined);
         const chunks = [];
         rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => {
@@ -3320,6 +3350,9 @@ function PlayerCore() {
           (this._recSrcs || []).forEach((n) => { try { n.disconnect(); } catch (e) { /* ignore */ } });
           this._recSrcs = null;
           this._recMix = null;
+          this._recStart = 0;
+          this.el.classList.remove('hp-rec-crop');
+          this._fit();
           this.recorder = null;
           this._updateUI();
           const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
@@ -3331,6 +3364,7 @@ function PlayerCore() {
         };
         stream.getVideoTracks()[0].addEventListener('ended', () => { if (this.recorder) this.recorder.stop(); });
         rec.start(500);
+        this._recStart = Date.now();
         this.recorder = rec;
         this._updateUI();
         this._toast('녹화 중… (R 또는 ● 버튼으로 정지)');
@@ -3482,7 +3516,10 @@ function PlayerCore() {
 .hp-move[hidden]{display:none}.hp-move button{font:inherit;border:0;border-radius:8px;padding:8px 14px;background:#4dabf7;color:#fff;cursor:pointer}.hp-move button[data-x]{background:transparent;padding:8px}
 .hp-viewport.hp-zooming{transition:transform .35s cubic-bezier(.3,.7,.3,1)}
 .hp-zoom-armed .hp-viewport,.hp-zoom-armed .hp-viewport *{cursor:zoom-in!important}.hp-zoomed .hp-viewport,.hp-zoomed .hp-viewport *{cursor:zoom-out!important}
-.hp-recording .hp-controls,.hp-recording .hp-toast,.hp-recording .hp-notes,.hp-recording .hp-goto,.hp-recording .hp-move,.hp-recording .hp-laser{display:none!important}.hp-recording .hp-viewport,.hp-recording .hp-viewport *{cursor:none!important}
+.hp-cropbox{position:absolute;pointer-events:none}
+.hp-rec-crop .hp-viewport{bottom:76px}
+.hp-rec-crop .hp-controls{opacity:1!important;transform:translateX(-50%)!important;bottom:12px;display:flex!important}
+.hp-recording:not(.hp-rec-crop) .hp-controls,.hp-recording .hp-toast,.hp-recording .hp-notes,.hp-recording .hp-goto,.hp-recording .hp-move,.hp-recording .hp-laser{display:none!important}.hp-recording .hp-viewport,.hp-recording .hp-viewport *{cursor:none!important}
 .hp-looping .hp-controls{display:none}.hp-looping .hp-viewport,.hp-looping .hp-viewport *{cursor:none!important}
 .hp-laser{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(circle,#ff2a2a 0 35%,rgba(255,40,40,.35) 60%,transparent 70%);pointer-events:none;display:none;z-index:13}
 .hp-laser-on .hp-laser{display:block}.hp-laser-on .hp-viewport{cursor:none}
