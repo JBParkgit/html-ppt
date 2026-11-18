@@ -40,7 +40,7 @@ CLI: `node .claude/skills/slide-studio/scripts/deck.mjs <command>` (이하 `deck
 | `patch <ops.json\|->` | 부분 수정 (요소/슬라이드/테마/비율/애니메이션) |
 | `put <deck.json>` | 덱 JSON 통째로 교체 (고급) |
 | `render [n\|all] [--out f.png] [--width px]` | PNG 미리보기 (헤드리스 Chrome/Edge) |
-| `export [out.html]` | 단독 실행 HTML (주소 끝 `#n` = 그 슬라이드부터) |
+| `export [out.html] [--embed-fonts]` | 단독 실행 HTML (주소 끝 `#n` = 그 슬라이드부터). `--embed-fonts` 면 덱이 쓰는 글꼴을 덱에 나오는 글자만 담아 파일 안에 넣는다(인터넷 없이도 같은 글꼴). 글자를 고친 뒤에는 이 옵션으로 다시 내보낸다 |
 | `export <out.pdf> [--notes]` | PDF 바로 만들기 (1장 = 1쪽, 노트 포함 선택) |
 | `styles <spec.json> --variants v.json [--slides 1,2]` | 스타일 시안 비교 이미지 (덱은 그대로) |
 | `goto n` · `next` · `prev` · `present [n] [--auto]` · `stop` · `toast "msg"` | 편집기/발표 원격 제어 |

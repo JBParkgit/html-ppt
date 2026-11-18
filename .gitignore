@@ -14,3 +14,4 @@ _*.html
 
 # 투표 앱(live-poll)은 별도 관리 — 이 저장소에 넣지 않음
 live-poll/
+.docuflow/
