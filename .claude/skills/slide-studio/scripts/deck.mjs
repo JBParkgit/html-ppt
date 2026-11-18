@@ -649,12 +649,58 @@ function mvInline(deck) {
 
 const safeJson = (o) => JSON.stringify(o).replace(/</g, '\\u003c').split('\u2028').join('\\u2028').split('\u2029').join('\\u2029');
 
-function exportHtml(deck) {
+// --embed-fonts: 덱이 쓰는 글꼴만, 덱에 나오는 글자만 담은 작은 글꼴을 받아 HTML 에 직접 넣는다 (인터넷 없이도 같은 글꼴)
+const FONT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+async function embedFontsCss(deck) {
+  // FONT_LINK 의 family=이름:wght@… 목록 → { 이름: 'wght@…' }
+  const fams = {};
+  for (const m of FONT_LINK.matchAll(/family=([^&:]+)(?::([^&]+))?/g)) fams[decodeURIComponent(m[1].replace(/\+/g, ' '))] = m[2] || '';
+  // 덱 JSON + 테마 정의(js/store.js 의 해당 줄)에 이름이 나오는 글꼴만. 시작 화면용 Noto Sans KR 은 항상 포함
+  const json = JSON.stringify(deck);
+  let themeLine = '';
+  const custom = (deck.theme && deck.theme.custom) || {};
+  // 사용자 팔레트가 제목·본문 글꼴을 모두 정했으면 테마 기본 글꼴은 쓰이지 않는다
+  if (!(custom.fontTitle && custom.fontBody)) try { const id = deck.theme && deck.theme.id; if (id) themeLine = (fs.readFileSync(path.join(ROOT, 'js', 'store.js'), 'utf8').split('\n').find((l) => new RegExp('^\\s*' + id + '\\s*:').test(l)) || ''); } catch (e) { /* 테마 파일 없음 */ }
+  const used = Object.keys(fams).filter((f) => f === 'Noto Sans KR' || json.includes(f) || themeLine.includes(f));
+  // 덱에 나오는 글자 (태그·엔티티 제거) + 시작 화면 글자 + 기본 ASCII
+  const plain = json.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\\n/g, ' ');
+  // 시작 화면·발표 컨트롤(엔진) 화면 글자도 같은 글꼴로 보이게 한글·기호를 함께 넣는다
+  const ui = '▶ 발표 시작 🔁 반복 재생 →/Space 다음 · ← 이전 · F 전체화면 · A 자동재생 · G 전체 보기 · Z 돋보기 · N 노트' + (engine().coreSource.match(/[ㄱ-힝←-⇿①-⓿·]/g) || []).join('');
+  const set = new Set([...plain, ...ui]);
+  for (let c = 0x20; c < 0x7f; c++) set.add(String.fromCharCode(c));
+  const chars = [...set].filter((c) => c.codePointAt(0) >= 0x20 && !/[\uD800-\uDFFF]/.test(c)).sort();
+  // 주소 길이 제한 때문에 글자를 묶음으로 나눠 받고, 묶음마다 unicode-range 로 담당 글자를 지정한다
+  const chunks = [];
+  for (let i = 0; i < chars.length; i += 300) chunks.push(chars.slice(i, i + 300));
+  const rules = [];
+  for (const fam of used) {
+    for (const part of chunks) {
+      const q = 'family=' + fam.replace(/ /g, '+') + (fams[fam] ? ':' + fams[fam] : '') + '&text=' + encodeURIComponent(part.join('')) + '&display=swap';
+      const res = await fetch('https://fonts.googleapis.com/css2?' + q, { headers: { 'User-Agent': FONT_UA } });
+      if (!res.ok) throw new Error(`글꼴 CSS 를 받지 못했습니다 (${fam}, HTTP ${res.status})`);
+      const css = await res.text();
+      const range = part.map((c) => 'U+' + c.codePointAt(0).toString(16).toUpperCase()).join(',');
+      for (const block of css.match(/@font-face\s*{[^}]*}/g) || []) {
+        const url = (block.match(/url\(([^)]+)\)/) || [])[1];
+        if (!url) continue;
+        const fr = await fetch(url.replace(/['"]/g, ''), { headers: { 'User-Agent': FONT_UA } });
+        if (!fr.ok) throw new Error(`글꼴 파일을 받지 못했습니다 (${fam}, HTTP ${fr.status})`);
+        const b64 = Buffer.from(await fr.arrayBuffer()).toString('base64');
+        const fmt = (block.match(/format\(['"]?([^'")]+)/) || [])[1] || 'woff2';
+        rules.push(block.replace(/src:[^;]+;/, `src:url(data:font/${fmt};base64,${b64}) format('${fmt}');`).replace(/}\s*$/, `unicode-range:${range};}`));
+      }
+    }
+  }
+  if (!rules.length) throw new Error('받은 글꼴이 없습니다');
+  return { css: rules.join('\n'), fams: used, glyphs: chars.length };
+}
+
+function exportHtml(deck, fontCss) {
   const X = engine();
   const d = inlineMedia(deck);
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(d.title || '프레젠테이션')}</title><link rel="stylesheet" href="${FONT_LINK}">
+<title>${esc(d.title || '프레젠테이션')}</title>${fontCss ? `<style data-hp-fonts="embedded">${fontCss}</style>` : `<link rel="stylesheet" href="${FONT_LINK}">`}
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
 .start{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(0,0,0,.55);color:#fff;font-family:'Noto Sans KR',sans-serif;z-index:9999;cursor:pointer}
 .start b{font-size:28px}.start span{opacity:.8;font-size:15px}.start button{font:inherit;font-size:18px;padding:12px 28px;border-radius:12px;border:0;background:#4dabf7;color:#fff;cursor:pointer}</style>
@@ -985,7 +1031,17 @@ async function main() {
         if (cur.deck.slides.some((s) => s.elements.some((e) => e.src && e.src.startsWith('idb:') && !idbFile(e.src)))) warn('아직 백업되지 않은 브라우저 미디어(idb:)는 PDF 에 나오지 않습니다.');
         return;
       }
-      fs.writeFileSync(out, exportHtml(cur.deck));
+      let fontCss = null;
+      if (flags['embed-fonts']) {
+        try {
+          const f = await embedFontsCss(cur.deck);
+          fontCss = f.css;
+          console.log(`🔤 글꼴 포함: ${f.fams.join(', ')} (글자 ${f.glyphs}자, ${Math.round(f.css.length / 1024)}KB)`);
+        } catch (e) {
+          warn('글꼴을 넣지 못해 기존처럼 Google Fonts 링크로 내보냅니다: ' + e.message);
+        }
+      }
+      fs.writeFileSync(out, exportHtml(cur.deck, fontCss));
       console.log('✓ 내보냄: ' + out);
       return;
     }
