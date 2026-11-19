@@ -95,6 +95,7 @@ button { cursor: pointer; }
 #canvas .hp-el { cursor: move; }
 #canvas .hp-el.editing { cursor: text; }
 #canvas .hp-el.editing .hp-tc { cursor: text; user-select: text; }
+#canvas .hp-el.editing .hp-cell-editing { cursor: text; user-select: text; outline: 3px solid #4dabf7; outline-offset: -3px; }
 #canvas .hp-slide { user-select: none; }
 #canvas .hp-tc[contenteditable=true] { outline: none; }
 #sel-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10000; --inv: 1; }

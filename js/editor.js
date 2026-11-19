@@ -103,7 +103,17 @@ const Editor = (() => {
       });
     }
     canvas.addEventListener('focusout', onFocusOut);
-    canvas.addEventListener('keydown', (e) => { if (e.key === 'Escape' && E.editing) { e.preventDefault(); document.activeElement.blur(); } });
+    canvas.addEventListener('keydown', (e) => {
+      if (!E.editing) return;
+      if (E.cell) {
+        // 표 칸: Enter 저장 · Esc 취소 · Tab/Shift+Tab 다음/이전 칸 (줄바꿈은 표 데이터에 넣을 수 없음)
+        if (e.key === 'Escape') { e.preventDefault(); document.activeElement.textContent = E.cell.orig; document.activeElement.blur(); }
+        else if (e.key === 'Enter') { e.preventDefault(); document.activeElement.blur(); }
+        else if (e.key === 'Tab') { e.preventDefault(); E.commitEdit(e.shiftKey ? -1 : 1); }
+        return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); document.activeElement.blur(); }
+    });
   };
 
   /* ---------- 렌더링 ---------- */
@@ -710,7 +720,10 @@ const Editor = (() => {
     else if (el.type === 'video') App.replaceMedia(el, 'video');
     else if (el.type === 'embed') App.editEmbed(el);
     else if (el.type === 'model') App.addModel(el);
-    else if (el.type === 'table') Panels.focusTable();
+    else if (el.type === 'table') {
+      const cell = cellAt(e.clientX, e.clientY, elDom);
+      if (cell) E.startCellEdit(el.id, cell); else Panels.focusTable();
+    }
     else if (el.type === 'path') Pen.edit(el);
     else if (el.type === 'code') Panels.focusCode();
     else if (el.type === 'chart') App.chartDataEditor(el);
@@ -747,18 +760,90 @@ const Editor = (() => {
   };
 
   function onFocusOut(e) {
-    const tc = e.target.closest && e.target.closest('.hp-tc');
+    const tc = e.target.closest && (e.target.closest('.hp-tc') || (E.cell && e.target.closest('.hp-table td, .hp-table th')));
     if (!tc || !E.editing) return;
     // 툴바/패널 버튼을 누르는 중이면 편집 유지
     setTimeout(() => {
       if (document.activeElement === tc) return;
+      if (E.cell && E.cellEl !== tc) return; // Tab 으로 다른 칸 편집이 이미 시작됨
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-keep-edit]')) return;
       E.commitEdit();
     }, 0);
   }
 
-  E.commitEdit = function () {
+  /* ---------- 표 칸 바로 편집 ---------- */
+  // 표 데이터는 한 줄 = 한 행, 쉼표(또는 탭) = 칸 구분 (Core 의 csvRows 와 같은 규칙)
+  const tableRows = (data) => String(data || '').split(/\r?\n/).filter((l) => l.trim() !== '').map((l) => l.split(/\t|,/).map((c) => c.trim()));
+
+  function cellAt(x, y, elDom) {
+    for (const h of document.elementsFromPoint(x, y)) {
+      const c = h.closest && h.closest('.hp-table td, .hp-table th');
+      if (c && elDom.contains(c)) return c;
+    }
+    return null;
+  }
+
+  E.startCellEdit = function (id, cell) {
+    const d = domFor(id);
+    if (!d || !cell) return;
+    E.editing = id;
+    E.cell = { ri: cell.parentNode.rowIndex, ci: cell.cellIndex, orig: cell.textContent };
+    E.cellEl = cell;
+    Store.sel = [id];
+    d.classList.add('editing');
+    cell.contentEditable = 'true';
+    cell.spellcheck = false;
+    cell.classList.add('hp-cell-editing');
+    cell.focus();
+    const r = document.createRange();
+    r.selectNodeContents(cell);
+    const s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    E.drawSelection();
+    document.body.classList.add('text-editing');
+  };
+
+  // move: 저장 뒤 옮겨 갈 칸 (+1 다음 칸, -1 이전 칸)
+  function commitCell(move) {
+    const id = E.editing, info = E.cell;
+    const d = domFor(id), el = Store.el(id);
+    E.editing = null;
+    E.cell = null;
+    document.body.classList.remove('text-editing');
+    if (!d || !el) { E.render(); return; }
+    const t = d.querySelector('table.hp-table');
+    const cell = t && t.rows[info.ri] && t.rows[info.ri].cells[info.ci];
+    let changed = false;
+    if (cell) {
+      cell.contentEditable = 'false';
+      let v = cell.textContent.replace(/\s+/g, ' ').trim();
+      const hadSep = /[,\t]/.test(v);
+      v = v.replace(/,/g, '，');
+      const rows = tableRows(el.data);
+      if (rows[info.ri] && v !== (rows[info.ri][info.ci] || '')) {
+        while (rows[info.ri].length <= info.ci) rows[info.ri].push('');
+        rows[info.ri][info.ci] = v;
+        Store.checkpoint();
+        el.data = rows.map((r) => r.join(',')).join('\n');
+        changed = true;
+        if (hadSep) UI.toast('쉼표는 표의 칸 구분 기호라서 전각 쉼표(，)로 바꿨습니다');
+      }
+    }
+    if (changed) Store.emit({ content: true }); else E.render();
+    if (move) {
+      const nt = domFor(id) && domFor(id).querySelector('table.hp-table');
+      if (!nt) return;
+      const cells = [...nt.querySelectorAll('td, th')];
+      const cur = nt.rows[info.ri] && nt.rows[info.ri].cells[info.ci];
+      const next = cells[cells.indexOf(cur) + move];
+      if (next) E.startCellEdit(id, next);
+    }
+  }
+
+  E.commitEdit = function (move) {
     if (!E.editing) return;
+    if (E.cell) { commitCell(move); return; }
     const id = E.editing;
     const d = domFor(id);
     const el = Store.el(id);
