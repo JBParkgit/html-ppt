@@ -2,6 +2,9 @@
 decks/
 assets/
 
+# 발표별 기획서 · 참고자료 · 내보낸 발표 HTML (앱이 아니라 만들어진 결과물)
+docs/
+
 # 음악 파일 (tools/make_music.py 로 다시 만들 수 있음) — 목록(library.json)만 추적
 music/*.mp3
 music/pixabay/
