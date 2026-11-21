@@ -1481,7 +1481,9 @@ function PlayerCore() {
 
   /* ---------- 펜 선 (path) ----------
      el.pts = [{ x, y, ix, iy, ox, oy, s }] — 요소 안 좌표(px, 기준 크기 pw×ph). ix/iy = 들어오는 핸들, ox/oy = 나가는 핸들(없으면 모서리점), s = 부드러운 점
-     el.closed, stroke, strokeWidth, fill, dash(solid|dash|dot|longdash), cap(round|butt|square), join(round|miter|bevel), arrowStart, arrowEnd */
+     el.closed, stroke, strokeWidth, fill, dash(solid|dash|dot|longdash), cap(round|butt|square), join(round|miter|bevel), arrowStart, arrowEnd
+     브러시로 그린 선이 더 쓰는 것: dashArr([선, 간격] px — dash 대신), glow({ color, size, strength } 빛 번짐), blend('multiply' 등 겹침 방식)
+     el.d = 붓·캘리그래피·스프레이·도장처럼 윤곽을 직접 만든 도형의 경로 문자열(기준 크기 pw×ph). 있으면 pts 대신 이것을 그린다. */
   const hx = (p, k) => (p[k] == null ? p[k === 'ix' || k === 'ox' ? 'x' : 'y'] : p[k]);
   function pathSegs(pts, closed) {
     const out = [];
@@ -1517,20 +1519,32 @@ function PlayerCore() {
     return out;
   }
   const DASHES = { dash: [3, 2], longdash: [6, 3], dot: [0.01, 2] };
+  // 빛 번짐(네온): 같은 색 그림자를 여러 겹 겹친다
+  function glowFilter(g) {
+    if (!g || !(g.size > 0)) return '';
+    const color = String(g.color || '#ffffff').replace(/[^#\w(),.% -]/g, '');
+    const n = Math.max(1, Math.min(4, Math.round(g.strength || 1)));
+    return Array.from({ length: n }, () => `drop-shadow(0 0 ${(+g.size).toFixed(1)}px ${color})`).join(' ');
+  }
   function renderPath(el, mode) {
     const sx = el.pw ? el.w / el.pw : 1, sy = el.ph ? el.h / el.ph : 1;
     const sw = el.strokeWidth != null ? +el.strokeWidth : 6;
     const stroke = el.stroke || '#222222';
     const noFill = !el.fill || el.fill === 'transparent' || el.fill === 'none';
-    const d = pathD(el.pts, el.closed, sx, sy);
-    const da = DASHES[el.dash] ? DASHES[el.dash].map((v) => (v * Math.max(1, sw)).toFixed(2)).join(' ') : '';
-    const cap = el.dash === 'dot' ? 'round' : (el.cap || 'round');
+    // el.d 는 문서 파일에서 그대로 오므로 경로 문자열에 쓰는 글자만 남긴다
+    const raw = typeof el.d === 'string' && el.d ? el.d.replace(/[^MLHVCSQTAZmlhvcsqtaz0-9eE .,+-]/g, '') : '';
+    const d = raw || pathD(el.pts, el.closed, sx, sy);
+    const tf = raw && (sx !== 1 || sy !== 1) ? ` transform="scale(${sx} ${sy})"` : '';
+    const arr = Array.isArray(el.dashArr) && el.dashArr.length >= 2 ? el.dashArr.slice(0, 2).map((v) => Math.max(0.01, +v || 0).toFixed(2)).join(' ') : '';
+    const da = arr || (DASHES[el.dash] ? DASHES[el.dash].map((v) => (v * Math.max(1, sw)).toFixed(2)).join(' ') : '');
+    const glow = glowFilter(el.glow);
+    const cap = !arr && el.dash === 'dot' ? 'round' : (el.cap || 'round');
     const mid = 'hpm-' + el.id;
     const mk = (id, rev) => `<marker id="${id}" viewBox="0 0 10 10" refX="${rev ? 3 : 7}" refY="5" markerWidth="4.2" markerHeight="4.2" markerUnits="strokeWidth" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="${stroke}"/></marker>`;
     const defs = el.arrowStart || el.arrowEnd ? `<defs>${el.arrowStart ? mk(mid + 's', true) : ''}${el.arrowEnd ? mk(mid + 'e') : ''}</defs>` : '';
     const markers = (el.arrowStart ? ` marker-start="url(#${mid}s)"` : '') + (el.arrowEnd ? ` marker-end="url(#${mid}e)"` : '');
-    const hit = mode === 'edit' ? `<path class="hp-hit" d="${d}" fill="${noFill || !el.closed ? 'none' : 'transparent'}" stroke="transparent" stroke-width="${Math.max(sw, 18)}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
-    return `<svg class="hp-pathsvg" width="100%" height="100%" overflow="visible">${defs}<path class="hp-stroke" d="${d}" fill="${noFill ? 'none' : el.fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="${cap}" stroke-linejoin="${el.join || 'round'}"${da ? ` stroke-dasharray="${da}"` : ''}${markers}/>${hit}</svg>`;
+    const hit = mode === 'edit' ? `<path class="hp-hit" d="${d}"${tf} fill="${noFill || !el.closed ? 'none' : 'transparent'}" stroke="transparent" stroke-width="${Math.max(sw, 18)}" stroke-linecap="round" stroke-linejoin="round"/>` : '';
+    return `<svg class="hp-pathsvg" width="100%" height="100%" overflow="visible"${glow ? ` style="filter:${glow}"` : ''}>${defs}<path class="hp-stroke" d="${d}"${tf} fill="${noFill ? 'none' : el.fill}" stroke="${sw > 0 ? stroke : 'none'}" stroke-width="${sw}" stroke-linecap="${cap}" stroke-linejoin="${el.join || 'round'}"${da ? ` stroke-dasharray="${da}"` : ''}${markers}/>${hit}</svg>`;
   }
 
   function renderElement(deck, el, index, mode, resolve) {
@@ -1544,6 +1558,7 @@ function PlayerCore() {
     if (el.rotation) st.transform = `rotate(${el.rotation}deg)`;
     if (el.opacity != null && el.opacity < 1) st.opacity = el.opacity;
     if (el.shadow) st.filter = `drop-shadow(0 ${el.shadow}px ${el.shadow * 2}px rgba(0,0,0,.35))`;
+    if (el.blend && /^[a-z-]+$/.test(el.blend) && el.blend !== 'normal') st.mixBlendMode = el.blend;
     w.dataset.mkey = el.mkey || el.id;
     const sig = elSig(el);
     if (sig) w.dataset.msig = sig;
@@ -3639,5 +3654,5 @@ html,body{margin:0;height:100%;background:#12141c;color:#e9ecf3;font-family:'Not
     doc.head.appendChild(st);
   }
 
-  return { hooks, setLive3d, elSig, tokenizeCode, matchTokens, CODE_LANGS, ANIMS, ANIM_CATS, TRANSITIONS, SHAPES, BG_FX, BG_FX_CATS, BG_FX_COLORS, BG_FX_RETIRED, ACTIONS, HOVERS, CHART_TYPES, CHART_PALETTE, renderChart, animateChart, countUp, DRAW_FX, DRAW_DIRS, pathD, pathSegs, samplePath, bez, animateVisibleCharts, renderSlide, renderElement, buildGroups, applyState, playGroup, previewAll, playTransition, Presenter, CSS, injectCSS, parseEmbed, embedSrc, esc, csvRows };
+  return { glowFilter, hooks, setLive3d, elSig, tokenizeCode, matchTokens, CODE_LANGS, ANIMS, ANIM_CATS, TRANSITIONS, SHAPES, BG_FX, BG_FX_CATS, BG_FX_COLORS, BG_FX_RETIRED, ACTIONS, HOVERS, CHART_TYPES, CHART_PALETTE, renderChart, animateChart, countUp, DRAW_FX, DRAW_DIRS, pathD, pathSegs, samplePath, bez, animateVisibleCharts, renderSlide, renderElement, buildGroups, applyState, playGroup, previewAll, playTransition, Presenter, CSS, injectCSS, parseEmbed, embedSrc, esc, csvRows };
 }

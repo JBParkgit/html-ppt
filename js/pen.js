@@ -60,6 +60,7 @@ const Pen = (() => {
 
   /* ================= 그리기 ================= */
   P.startDraw = function () {
+    if (window.Brush && Brush.mode) Brush.stop();
     if (P.mode === 'edit') P.exitEdit();
     if (Editor.editing) Editor.commitEdit();
     Store.select([]);
@@ -74,6 +75,7 @@ const Pen = (() => {
     wrap.classList.remove('pen-mode');
     P.redraw();
   }
+  P.cancelDraw = cancelDraw;
   function finishDraw(closed) {
     const list = pts;
     cancelDraw();
@@ -123,6 +125,8 @@ const Pen = (() => {
   /* ================= 점 편집 ================= */
   P.edit = function (e) {
     if (!e || e.type !== 'path') return;
+    if (e.d) { UI.toast('붓·캘리그래피·스프레이·도장으로 그린 것은 점 편집을 할 수 없습니다 — 색·크기·회전은 바꿀 수 있습니다'); return; }
+    if (window.Brush && Brush.mode) Brush.stop();
     if (e.locked) { UI.toast('잠긴 요소입니다 — 잠금을 풀고 편집하세요'); return; }
     if (P.mode === 'draw') cancelDraw();
     if (P.mode === 'edit' && el !== e) P.exitEdit();
@@ -205,7 +209,7 @@ const Pen = (() => {
 
   // 선 방향 뒤집기 (점 순서와 들어오는/나가는 핸들을 바꿈)
   P.reverse = function (e) {
-    if (!e || e.type !== 'path') return;
+    if (!e || e.type !== 'path' || e.d) return;
     const editing = P.mode === 'edit' && el === e;
     Store.checkpoint();
     e.pts.reverse();
@@ -395,13 +399,15 @@ const Pen = (() => {
     return n;
   }
   function anchorBox(p, attrs, parent) {
-    const s = 9 * inv();
-    return node('rect', Object.assign({ x: p.x - s / 2, y: p.y - s / 2, width: s, height: s, class: 'pk-a', 'stroke-width': 1.5 * inv() }, attrs), parent);
+    const s = 10 * inv();
+    return node('rect', Object.assign({ x: p.x - s / 2, y: p.y - s / 2, width: s, height: s, class: 'pk-a', 'stroke-width': 2 * inv() }, attrs), parent);
   }
   function handle(p, k, i, parent) {
     const hxv = p[k + 'x'], hyv = p[k + 'y'];
-    node('line', { x1: p.x, y1: p.y, x2: hxv, y2: hyv, class: 'pk-l', 'stroke-width': 1.2 * inv() }, parent);
-    node('circle', { cx: hxv, cy: hyv, r: 5 * inv(), class: 'pk-h', 'stroke-width': 1.5 * inv(), 'data-kind': k === 'i' ? 'hin' : 'hout', 'data-i': i }, parent);
+    node('line', { x1: p.x, y1: p.y, x2: hxv, y2: hyv, class: 'pk-l', 'stroke-width': 1.5 * inv() }, parent);
+    // 핸들은 주황색 마름모 — 파란 네모·동그라미인 점(앵커)과 헷갈리지 않게
+    const r = 6.5 * inv();
+    node('path', { d: `M${hxv} ${hyv - r} L${hxv + r} ${hyv} L${hxv} ${hyv + r} L${hxv - r} ${hyv} Z`, class: 'pk-h', 'stroke-width': 1.25 * inv(), 'data-kind': k === 'i' ? 'hin' : 'hout', 'data-i': i }, parent);
   }
   P.redraw = function () {
     if (!svg) return;

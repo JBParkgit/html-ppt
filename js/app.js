@@ -110,6 +110,7 @@ const App = (() => {
     Store.init();
     Editor.init();
     Pen.init();
+    Brush.init();
     A.initToolbarFit();
     Panels.init();
     Media.onLoaded = debounce(() => { Panels.invalidateThumbs(); Editor.render(); Panels.renderList(); }, 120);
@@ -177,7 +178,9 @@ const App = (() => {
     on('#btn-file', (e) => UI.menu(e.currentTarget, [
       ['📄 새 프레젠테이션', () => A.newDeck(), ''],
       ['📂 열기…', () => A.pickProject(), 'Ctrl+O'],
+      ['📚 내 발표 (보관함)', () => Library.open(), 'Ctrl+Shift+O'],
       ['💾 파일로 저장', () => IO.saveProject(), 'Ctrl+S'],
+      ['📥 내 발표에 저장 (decks 폴더)', () => Library.saveCurrent(), 'Ctrl+Shift+S'],
       '-',
       ['🌐 HTML로 내보내기 (단독 실행)', () => IO.exportHTML(), ''],
       ['🖨 PDF로 인쇄', () => IO.printPDF(), 'Ctrl+P'],
@@ -206,6 +209,8 @@ const App = (() => {
     on('#btn-music', () => A.musicDialog());
     on('#btn-overview', () => A.overview());
     on('#btn-pen', () => (Pen.mode === 'draw' ? null : Pen.startDraw()));
+    on('#btn-library', () => Library.open());
+    on('#btn-brush', () => Brush.toggle());
     on('#btn-undo', () => { Editor.commitEdit(); Store.undo(); });
     on('#btn-redo', () => { Editor.commitEdit(); Store.redo(); });
     on('#btn-zoom-in', () => Editor.setZoom(Math.min(3, Editor.scale * 1.2)));
@@ -1547,7 +1552,7 @@ const App = (() => {
       else if (e.role === 'accent' || e.type === 'shape') fx = e.w > e.h * 4 ? 'wipe-right' : 'zoom-in';
       else if (e.type === 'image' || e.type === 'video' || e.type === 'embed') fx = e.x < Store.deck.width / 3 ? 'fly-left' : 'zoom-down';
       else if (e.type === 'table') fx = 'wipe-down';
-      else if (e.type === 'path') fx = 'draw-line';
+      else if (e.type === 'path') fx = e.d ? 'wipe-right' : 'draw-line';
       s.anims.push(mkAnim(e.id, fx, 'after', { delay: i ? 80 : 0, duration: 600 }));
     });
     Store.emit({ content: true });
@@ -1855,6 +1860,8 @@ const App = (() => {
       ['Alt + 휠', '3D 모델 가깝게 / 멀게'],
       ['PageUp / PageDown', '이전 / 다음 슬라이드'],
       ['Ctrl+S / Ctrl+O', '파일로 저장 / 열기'],
+      ['Ctrl+Shift+O / Ctrl+Shift+S', '내 발표(보관함) 열기 / 내 발표에 저장'],
+      ['B', '브러시 (손으로 그리기) — Shift = 직선, Esc = 끝'],
       ['G', '전체 보기: 모든 슬라이드 격자 (클릭 이동 · 끌어서 순서 바꾸기)'],
       ['P', '펜: 클릭 = 모서리점, 끌기 = 곡선점, 첫 점 클릭 = 닫기, Enter/더블클릭 = 끝, Backspace = 마지막 점 지우기, Shift = 45°'],
       ['펜 선 더블클릭', '점 편집: 점·핸들 끌기, Alt+점 끌기 = 핸들 뽑기, Alt+핸들 = 한쪽만, 점 더블클릭 = 모서리↔곡선, 선 위 클릭 = 점 추가, Delete = 점 삭제'],
@@ -2107,6 +2114,8 @@ const App = (() => {
       const key = e.key;
       if (key === 'F1') { e.preventDefault(); A.help(); return; }
       if (ctrl && key.toLowerCase() === 's') { e.preventDefault(); Store.saveNow(); IO.saveProject(); return; }
+      if (ctrl && e.shiftKey && key.toLowerCase() === 'o') { e.preventDefault(); Library.open(); return; }
+      if (ctrl && e.shiftKey && key.toLowerCase() === 's') { e.preventDefault(); Library.saveCurrent(); return; }
       if (ctrl && key.toLowerCase() === 'o') { e.preventDefault(); A.pickProject(); return; }
       if (ctrl && key.toLowerCase() === 'p') { e.preventDefault(); IO.printPDF(); return; }
       if (ctrl && key.toLowerCase() === 'm') { e.preventDefault(); A.addSlide('bullets'); return; }
@@ -2136,6 +2145,7 @@ const App = (() => {
       }
       if ((key === 'g' || key === 'G') && !ctrl && !e.altKey) { e.preventDefault(); A.overview(); return; }
       if ((key === 'p' || key === 'P') && !ctrl && !e.altKey) { e.preventDefault(); Pen.startDraw(); return; }
+      if ((key === 'b' || key === 'B') && !ctrl && !e.altKey) { e.preventDefault(); Brush.start(); return; }
       if (key === 'Delete' || key === 'Backspace') { if (Store.sel.length) { e.preventDefault(); A.deleteSel(); } return; }
       if (key === 'Escape') { Store.select([]); Editor.hideMenu(); return; }
       if ((key === 'Enter' || key === 'F2') && Store.sel.length === 1) {

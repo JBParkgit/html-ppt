@@ -535,11 +535,21 @@ const Panels = (() => {
         row('배경', color(el, 'fill', '#ffffff'), h('button', { class: 'p-btn', onclick: () => { setEls('fill', 'transparent'); done(); } }, '투명')),
         h('p', { class: 'p-hint' }, '편집 화면: Alt+끌기로 돌리기(Shift 를 함께 누르면 15° 단위), Alt+휠로 가깝게/멀게 — 놓은 각도가 시작 시점으로 저장됩니다. 그냥 끌면 이동합니다. 발표 중에는 그냥 끌어서 돌리고, 잠시 뒤 자동 회전이 다시 시작됩니다.')));
     }
-    if (el.type === 'path') {
+    if (el.type === 'path' && el.d) {
+      // 붓·캘리그래피·스프레이·도장: 윤곽으로 된 도형이라 색만 바꾼다
+      const setColor = (v) => { Store.selected().forEach((x) => { if (x.type === 'path' && x.d) { x.fill = v; x.stroke = v; } }); Store.emit({ content: true }); };
+      const ci = h('input', { type: 'color', class: 'p-color', value: /^#[0-9a-f]{6}$/i.test(el.fill) ? el.fill : '#222222', onfocus: () => Store.checkpoint(), oninput: (e) => setColor(e.target.value) });
+      body.appendChild(section('브러시로 그린 것',
+        row('색', ci),
+        h('div', { class: 'p-btns wrap' }, h('button', { class: 'p-btn', onclick: () => Brush.start() }, '🖌 이어서 그리기 (B)')),
+        h('p', { class: 'p-hint' }, '붓·캘리그래피·스프레이·도장으로 그린 것은 채워진 도형입니다. 색·크기·회전·투명도·애니메이션은 바꿀 수 있지만 점 편집은 할 수 없습니다.')));
+    }
+    if (el.type === 'path' && !el.d) {
       body.appendChild(section('펜 선',
         h('div', { class: 'p-btns wrap' },
           h('button', { class: 'p-btn primary', onclick: () => Pen.edit(el) }, '✎ 점 편집 (더블클릭)'),
           h('button', { class: 'p-btn', onclick: () => Pen.startDraw() }, '✒ 새로 그리기 (P)'),
+          h('button', { class: 'p-btn', onclick: () => Brush.start() }, '🖌 브러시 (B)'),
           h('button', { class: 'p-btn', title: '선의 시작과 끝을 바꿉니다 — 화살표가 반대쪽으로 가고, "선 그리기"도 반대쪽부터 그려집니다', onclick: () => Pen.reverse(el) }, '⇄ 선 방향 뒤집기')),
         h('div', { class: 'p-btns wrap' },
           h('button', { class: 'p-btn', title: '점 편집 중 선택한 점에서 양쪽 핸들을 뽑아 곡선점으로 (또는 Alt+점 끌기로 직접 뽑기)', onclick: () => Pen.setHandles(true) }, '⟲ 선택한 점에 핸들 추가'),

@@ -9,7 +9,10 @@
  *      POST /api/command          { cmd: { type: 'goto'|'present'|'stop'|'next'|'prev', slide? } }
  *      GET  /api/selection        { selection, editorOnline }   편집기에서 지금 선택한 슬라이드·개체·글자
  *      POST /api/selection        { source, slideId, slide, ids, text }   (편집기가 선택이 바뀔 때 보냄, 메모리에만 보관)
- *      GET  /api/decks            { files: [{ path, size, mtime }] }  decks 폴더의 덱 파일 목록 (파일 ▸ 열기)
+ *      GET  /api/decks            { files: [{ path, size, mtime }] }  decks 폴더의 덱 파일 목록 (파일 ▸ 열기, 내 발표)
+ *      PUT  /api/decks/file?path=<decks 안 경로>[&overwrite=1]  (JSON 본문)  발표 파일 저장 — 내 발표 ▸ 지금 발표 저장 (이미 있으면 409)
+ *      DELETE /api/decks/file?path=<decks 안 경로>             발표 파일 삭제 — 내 발표 ▸ 완전히 삭제
+ *      GET/PUT /api/library       { folders, items }   내 발표의 별표·모음·휴지통 정보 (decks/library.json)
  *      GET  /api/media            { ids: [...] }       편집기가 브라우저(IndexedDB)에 넣은 미디어의 백업 목록
  *      PUT  /api/media/<id>       (파일 내용)            → decks/media/<id>.<확장자> 로 백업
  *      GET  /api/media/<id>       백업된 파일 (다른 브라우저에서 열 때 복원용)
@@ -173,11 +176,52 @@ async function api(req, res, url) {
         const full = path.join(dir, d.name);
         if (d.isDirectory()) { if (depth < 3 && full !== MEDIA_DIR && d.name !== 'renders') walk(full, depth + 1); continue; }
         if (!/\.json$/i.test(d.name) || d.name.endsWith('.tmp')) continue;
+        if (depth === 0 && d.name === 'library.json') continue; // 내 발표의 정리 정보는 발표 파일이 아니다
         try { const st = fs.statSync(full); files.push({ path: path.relative(DECK_DIR, full).split(path.sep).join('/'), size: st.size, mtime: st.mtimeMs }); } catch (e) { /* 무시 */ }
       }
     };
     walk(DECK_DIR, 0);
     return send(res, 200, { root: 'decks', files });
+  }
+  if (p === '/api/library') {
+    // 내 발표의 정리 정보 — 발표 파일은 건드리지 않고 여기에만 적는다
+    const file = path.join(DECK_DIR, 'library.json');
+    if (req.method === 'GET') {
+      let lib = {};
+      try { lib = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* 아직 없음 */ }
+      return send(res, 200, { folders: Array.isArray(lib.folders) ? lib.folders : [], items: lib.items && typeof lib.items === 'object' ? lib.items : {} });
+    }
+    if (req.method === 'PUT') {
+      let data;
+      try { data = JSON.parse(await readBody(req, 5 * 1024 * 1024)); } catch (e) { return send(res, 400, { error: 'bad json' }); }
+      if (!Array.isArray(data.folders) || !data.items || typeof data.items !== 'object') return send(res, 400, { error: 'folders 배열과 items 객체가 필요합니다' });
+      fs.mkdirSync(DECK_DIR, { recursive: true });
+      fs.writeFileSync(file + '.tmp', JSON.stringify({ folders: data.folders, items: data.items }, null, 1));
+      fs.renameSync(file + '.tmp', file);
+      return send(res, 200, { ok: true });
+    }
+  }
+  if (p === '/api/decks/file' && (req.method === 'PUT' || req.method === 'DELETE')) {
+    // decks 폴더 안의 발표 파일(.json)만 다룬다. 실시간 덱·정리 정보·미디어 백업은 건드리지 않는다.
+    const rel = String(url.searchParams.get('path') || '').replace(/\\/g, '/');
+    const file = path.normalize(path.join(DECK_DIR, rel));
+    const inside = file.startsWith(DECK_DIR + path.sep) && !rel.split('/').some((s) => !s || s.startsWith('.'));
+    if (!inside || !/\.json$/i.test(rel) || ['live.hppt.json', 'library.json'].includes(rel) || file.startsWith(MEDIA_DIR + path.sep)) return send(res, 400, { error: '쓸 수 없는 경로입니다: ' + rel });
+    if (req.method === 'DELETE') {
+      if (!fs.existsSync(file)) return send(res, 404, { error: 'not found' });
+      fs.unlinkSync(file);
+      console.log(`[library] delete decks/${rel}`);
+      return send(res, 200, { ok: true });
+    }
+    let text;
+    try { text = await readBody(req, 1024 * 1024 * 1024); } catch (e) { return send(res, 413, { error: 'too large' }); }
+    try { const d = JSON.parse(text); if (!Array.isArray((d.deck || d).slides)) throw new Error('no slides'); } catch (e) { return send(res, 400, { error: '발표 파일 형식이 아닙니다' }); }
+    if (fs.existsSync(file) && !url.searchParams.has('overwrite')) return send(res, 409, { error: '이미 있는 파일입니다: ' + rel });
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file + '.tmp', text);
+    fs.renameSync(file + '.tmp', file);
+    console.log(`[library] save decks/${rel} (${Math.round(text.length / 1024)} KB)`);
+    return send(res, 200, { ok: true, path: rel });
   }
   if (p === '/api/media' && req.method === 'GET') {
     let ids = [];

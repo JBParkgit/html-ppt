@@ -20,6 +20,7 @@
     </div>
     <div class="tb-group">
       <button id="btn-file" class="tb-btn">파일 ▾</button>
+      <button id="btn-library" class="tb-btn" title="내 발표 (Ctrl+Shift+O) — decks 폴더의 발표를 미리보기로 모아 보기 · 열기 · 저장 · 별표 · 모음 · 휴지통">📚<span class="lbl"> 내 발표</span></button>
       <button id="btn-undo" class="tb-btn icon" title="실행 취소 (Ctrl+Z)">↶</button>
       <button id="btn-redo" class="tb-btn icon" title="다시 실행 (Ctrl+Y)">↷</button>
     </div>
@@ -28,6 +29,7 @@
       <button id="btn-text" class="tb-btn" title="텍스트 상자"><b>T</b><span class="lbl"> 텍스트</span></button>
       <button id="btn-shape" class="tb-btn" title="도형">▭<span class="lbl"> 도형</span></button>
       <button id="btn-pen" class="tb-btn" title="펜 (P) — 클릭: 모서리점 · 끌기: 곡선점 · 첫 점 클릭: 닫기 · Enter: 끝 / 그린 선은 더블클릭해서 점 편집">✒<span class="lbl"> 펜</span></button>
+      <button id="btn-brush" class="tb-btn" title="브러시 (B) — 손으로 그리기: 연필·마커·붓·캘리그래피·네온·점선·스프레이·도장 / Esc: 끝">🖌<span class="lbl"> 브러시</span></button>
       <button id="btn-image" class="tb-btn" title="이미지 (파일, 드래그, 붙여넣기)">🖼<span class="lbl"> 이미지</span></button>
       <button id="btn-video" class="tb-btn" title="동영상/오디오 파일">🎬<span class="lbl"> 동영상</span></button>
       <button id="btn-embed" class="tb-btn" title="YouTube / Vimeo / URL">▶<span class="lbl"> 웹 동영상</span></button>
@@ -125,8 +127,10 @@
   <script src="js/store.js"></script>
   <script src="js/editor.js"></script>
   <script src="js/pen.js"></script>
+  <script src="js/brush.js"></script>
   <script src="js/panels.js"></script>
   <script src="js/io.js"></script>
+  <script src="js/library.js"></script>
   <script src="js/app.js"></script>
   <script src="js/live.js"></script>
 </body>
