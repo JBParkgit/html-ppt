@@ -222,6 +222,7 @@ const App = (() => {
       ['▶ 처음부터', () => A.present(0), 'F5 · Ctrl+Enter'],
       ['▶ 현재 슬라이드부터', () => A.present(Store.cur), 'Shift+F5 · Ctrl+Shift+Enter'],
       ['🖥 발표자 보기와 함께 발표', () => A.present(Store.cur, { presenterView: true, noFullscreen: true }), 'P'],
+      ['🖥 쇼를 할 모니터 고르기…', () => A.pickScreen(), ''],
       ['⏵ 자동 재생', () => A.present(0, { autoplay: true }), ''],
       ['🔁 반복 재생 (광고·대기 화면)…', () => A.loopDialog(), ''],
       ['🎬 녹화해서 동영상 만들기', () => A.makeVideo(), ''],
@@ -1762,6 +1763,15 @@ const App = (() => {
       A.present(a - 1, { loop: d.loop });
       return true;
     }, 'primary']]);
+  };
+
+  // 쇼를 할 모니터 고르기 — 고른 모니터는 기억되어, 발표를 시작하면 그 모니터에서 전체화면으로 쇼를 한다
+  A.pickScreen = async function () {
+    Core.injectCSS();
+    const r = await Core.pickShowScreen(document.body);
+    if (!r) return;
+    if (r.error) { UI.toast(r.error === 'unsupported' ? '이 브라우저는 모니터 고르기를 지원하지 않습니다 (Chrome·Edge 에서 사용)' : '모니터 정보를 볼 수 없습니다 — 주소창의 창 관리 권한을 허용해 주세요', 'warn'); return; }
+    UI.toast(r.screen ? `🖥 발표를 시작하면 「${r.name}」 모니터에서 쇼를 합니다` : '🖥 쇼 모니터를 자동으로 고릅니다 (서브 모니터 우선)');
   };
 
   // 서브 모니터를 꽂거나 빼면 편집 화면에서도 바로 알려 준다 (발표 중이면 발표 화면이 알아서 옮겨 감)

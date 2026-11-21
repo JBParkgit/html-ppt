@@ -2260,6 +2260,84 @@ function PlayerCore() {
   /* ------------------------------------------------------------------ */
   /* 발표 플레이어                                                        */
   /* ------------------------------------------------------------------ */
+  /* ---------- 쇼를 할 모니터 고르기 ----------
+     고른 모니터는 이 브라우저에 기억해 두고(localStorage), 다음 발표에도 그 모니터에서 쇼를 한다.
+     기억한 모니터가 연결되어 있지 않으면 자동(서브 모니터 우선)으로 돌아간다. */
+  const SCR_KEY = 'hppt.showScreen';
+  const sameScr = (a, b) => !!a && !!b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height && (a.label || '') === (b.label || '');
+  function savedShowScreen(screens) {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem(SCR_KEY) || 'null'); } catch (e) { /* 저장소 막힘 */ }
+    if (!p) return null;
+    const exact = screens.find((s) => sameScr(s, p));
+    if (exact) return exact;
+    // 배치(위치)만 바뀐 경우: 이름과 크기가 같은 모니터가 하나뿐이면 그 모니터
+    const alike = screens.filter((s) => p.label && s.label === p.label && s.width === p.width && s.height === p.height);
+    return alike.length === 1 ? alike[0] : null;
+  }
+  // 모니터 그림(해상도 비율대로)을 띄워 고르게 한다 → { screen, name } (자동이면 screen: null) | { error } | null(취소)
+  function pickShowScreen(host) {
+    if (!window.getScreenDetails) return Promise.resolve({ error: 'unsupported' });
+    return window.getScreenDetails().then((sd) => new Promise((resolve) => {
+      const ov = document.createElement('div');
+      ov.className = 'hp-scr';
+      let list = [];
+      const nameOf = (s, i) => s.label || `모니터 ${i + 1}`;
+      const done = (r) => {
+        window.removeEventListener('keydown', onKey, true);
+        sd.removeEventListener('screenschange', draw);
+        ov.remove();
+        resolve(r);
+      };
+      const choose = (s) => {
+        try {
+          if (s) localStorage.setItem(SCR_KEY, JSON.stringify({ label: s.label || '', left: s.left, top: s.top, width: s.width, height: s.height }));
+          else localStorage.removeItem(SCR_KEY);
+        } catch (e) { /* 저장소 막힘 — 이번 발표에만 적용 */ }
+        done({ screen: s || null, name: s ? nameOf(s, list.indexOf(s)) : '' });
+      };
+      const draw = () => {
+        list = [...sd.screens].sort((a, b) => a.left - b.left || a.top - b.top);   // 실제 놓인 순서(왼쪽 → 오른쪽)
+        const saved = savedShowScreen(list);
+        const px = (s) => { const r = s.devicePixelRatio || 1; return [Math.round(s.width * r), Math.round(s.height * r)]; };
+        const k = Math.min(230 / Math.max(...list.map((s) => px(s)[0])), 150 / Math.max(...list.map((s) => px(s)[1])));
+        ov.innerHTML = `<div class="hp-scr-box">
+          <h3>쇼를 할 모니터 고르기</h3>
+          <p>${list.length > 1 ? '발표 화면을 띄울 모니터를 누르세요 (숫자 키로도 고를 수 있습니다). 발표자 보기는 다른 모니터에 나옵니다.' : '지금은 모니터가 한 대만 연결되어 있습니다. 모니터를 더 연결하면 여기에 바로 나타납니다.'}</p>
+          <div class="hp-scr-row">${list.map((s, i) => {
+            const [w, h] = px(s), r = s.devicePixelRatio || 1;
+            const tags = [s.isPrimary ? '주 모니터' : '', s.isInternal ? '내장 화면' : '', s === sd.currentScreen ? '이 창이 있는 화면' : ''].filter(Boolean);
+            return `<button class="hp-scr-item${s === saved ? ' on' : ''}" data-i="${i}">
+              <span class="hp-scr-mon" style="width:${Math.round(w * k)}px;height:${Math.round(h * k)}px"><b>${i + 1}</b></span>
+              <span class="hp-scr-stand"></span>
+              <span class="hp-scr-name">${esc(nameOf(s, i))}</span>
+              <span class="hp-scr-res">${w} × ${h}${Math.abs(r - 1) > 0.01 ? ` · 배율 ${Math.round(r * 100)}%` : ''}</span>
+              <span class="hp-scr-tags">${s === saved ? '<i class="on">✓ 쇼 화면</i>' : ''}${tags.map((t) => `<i>${t}</i>`).join('')}</span>
+            </button>`;
+          }).join('')}</div>
+          <div class="hp-scr-foot"><button data-auto class="${saved ? '' : 'on'}" title="서브 모니터가 있으면 서브 모니터에서, 없으면 이 화면에서 발표합니다 (0)">${saved ? '' : '✓ '}자동 — 서브 모니터 우선</button><button data-x>취소 (Esc)</button></div>
+        </div>`;
+      };
+      const onKey = (e) => {
+        e.stopPropagation();   // 고르는 동안에는 발표 단축키가 먹지 않게
+        if (e.key === 'Escape') done(null);
+        else if (/^[1-9]$/.test(e.key) && list[+e.key - 1]) { e.preventDefault(); choose(list[+e.key - 1]); }
+        else if (e.key === '0') { e.preventDefault(); choose(null); }
+      };
+      ov.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const it = e.target.closest('.hp-scr-item');
+        if (it) choose(list[+it.dataset.i]);
+        else if (e.target.closest('[data-auto]')) choose(null);
+        else if (e.target.closest('[data-x]') || !e.target.closest('.hp-scr-box')) done(null);
+      });
+      window.addEventListener('keydown', onKey, true);
+      sd.addEventListener('screenschange', draw);
+      draw();
+      (host || document.body).appendChild(ov);
+    }), () => ({ error: 'denied' }));
+  }
+
   class Presenter {
     constructor(root, deck, options) {
       this.root = root;
@@ -2341,6 +2419,8 @@ function PlayerCore() {
         const was = this._extended;
         this._extended = ext;
         const mv = this.el.querySelector('.hp-move');
+        const sb = this.el.querySelector('[data-a="screen"]');
+        if (sb) sb.hidden = !(ext && window.getScreenDetails);
         if (ext && (!was || !this._onSub())) {
           // 창 관리 권한이 아직 없으면 자동으로 옮길 수 없다(권한 창은 클릭으로만) → 버튼을 바로 보여 준다
           let granted = false;
@@ -2355,8 +2435,20 @@ function PlayerCore() {
         }
       }, 700);
     }
-    // 지금 발표 화면이 서브 모니터 전체화면인지
-    _onSub() { return !!(document.fullscreenElement && this._fsScreen && !this._fsScreen.isPrimary); }
+    // 지금 발표 화면이 쇼 모니터(고른 모니터, 없으면 서브 모니터) 전체화면인지
+    _onSub() { return !!(document.fullscreenElement && this._fsScreen); }
+
+    // 쇼를 할 모니터 고르기 (S) — 모니터 그림에서 고르면 바로 그 모니터 전체화면으로 옮긴다
+    async pickScreen() {
+      if (this._scrPicking) return;
+      this._scrPicking = true;
+      const r = await pickShowScreen(this.el);
+      this._scrPicking = false;
+      if (this._exited || !r) return;
+      if (r.error) { this._toast(r.error === 'unsupported' ? '이 브라우저는 모니터 고르기를 지원하지 않습니다 (Chrome·Edge 에서 사용)' : '모니터 정보를 볼 수 없습니다 — 주소창의 창 관리 권한을 허용해 주세요'); return; }
+      const ok = await this.enterFullscreen({ screen: r.screen });
+      if (ok) this._toast(r.screen ? `「${r.name}」 모니터에서 발표합니다` : '쇼 모니터를 자동으로 고릅니다');
+    }
 
     /* ---------- 반복 재생 (광고·대기 화면) ---------- */
     // opts: { range: '1-5' | [시작, 끝](0부터), seconds }
@@ -2501,6 +2593,7 @@ function PlayerCore() {
           <button data-a="ov" title="전체 보기 (G) — 모든 슬라이드를 한눈에 보고 골라서 이동">▦ 전체</button>
           <button data-a="zoom" title="돋보기 (Z) — 누른 뒤 확대할 곳을 클릭, 휠로 배율, 다시 클릭하면 원래대로">🔍 확대</button>
           ${this.o.editable ? '<button data-a="edit" title="화면에서 텍스트 바로 수정 (E)">✎ 편집</button>' : ''}
+          <button data-a="screen" title="쇼를 할 모니터 고르기 (S)"${window.screen.isExtended && window.getScreenDetails ? '' : ' hidden'}>🖥 모니터</button>
           <button data-a="full" title="전체화면 (F)">⛶</button>
           <span class="hp-timer">00:00</span>
           ${this.o.standalone ? '' : '<button data-a="exit" title="종료 (Esc)">✕ 종료</button>'}
@@ -2534,6 +2627,7 @@ function PlayerCore() {
         else if (a === 'ov') this.toggleOverview();
         else if (a === 'edit') this.toggleEdit();
         else if (a === 'full') this.toggleFull();
+        else if (a === 'screen') this.pickScreen();
         else if (a === 'exit') this.exit();
       });
       this.viewport.addEventListener('click', (e) => {
@@ -3256,9 +3350,17 @@ function PlayerCore() {
           if (!this._sd && !this._exited) { this._sd = sd; sd.addEventListener('screenschange', this._onScreens); }
           // 발표자 보기는 편집기 창이 있던 모니터(처음 기억한 곳)에, 발표 화면은 그 밖의 모니터에
           let cur = (this._pvScreen && sd.screens.includes(this._pvScreen)) ? this._pvScreen : sd.currentScreen;
-          if (document.fullscreenElement && !this._pvScreen) cur = sd.screens.find((s) => s.isPrimary) || cur;
-          target = sd.screens.find((s) => s !== cur && !s.isPrimary) || sd.screens.find((s) => s !== cur) || null;
-          if (target) this._pvScreen = cur;
+          // 사용자가 쇼 모니터를 골라 두었으면(방금 골랐거나 기억해 둔 것) 그 모니터에서, 발표자 보기는 그 밖의 모니터에
+          const want = (opts.screen && sd.screens.find((s) => sameScr(s, opts.screen))) || (opts.screen === null ? null : savedShowScreen(sd.screens));
+          if (want && sd.screens.length > 1) {
+            target = want;
+            if (cur === want) cur = [sd.currentScreen, ...sd.screens].find((s) => s !== want);
+            this._pvScreen = cur;
+          } else {
+            if (document.fullscreenElement && !this._pvScreen) cur = sd.screens.find((s) => s.isPrimary) || cur;
+            target = sd.screens.find((s) => s !== cur && !s.isPrimary) || sd.screens.find((s) => s !== cur) || null;
+            if (target) this._pvScreen = cur;
+          }
         } catch (e) { /* 권한 거부 — 지금 모니터에서 발표 */ }
       }
       try {
@@ -3270,7 +3372,7 @@ function PlayerCore() {
           await document.exitFullscreen();
           await el.requestFullscreen(target ? { screen: target } : undefined);
         }
-        this._fsScreen = target || (this._sd && this._sd.currentScreen) || null;
+        this._fsScreen = target || null;
       } catch (e) {
         // 권한 요청 창을 누르는 사이 클릭 유효 시간이 지나면 전체화면이 거부된다
         if (!opts.quiet) this._toast(target ? 'F 키를 누르면 서브 모니터에서 전체화면으로 발표합니다' : 'F 키를 누르면 전체화면으로 발표합니다');
@@ -3432,6 +3534,7 @@ function PlayerCore() {
       else if (k === 'a' || k === 'A') this.toggleAuto();
       else if (k === 'r' || k === 'R') this.toggleRecord();
       else if (k === 'f' || k === 'F') this.toggleFull();
+      else if ((k === 's' || k === 'S') && !e.ctrlKey && !e.metaKey) this.pickScreen();
       else if (k === 'e' || k === 'E') this.toggleEdit();
     }
 
@@ -3528,6 +3631,23 @@ function PlayerCore() {
 .hp-toast{position:absolute;left:50%;top:24px;transform:translate(-50%,-10px);background:rgba(20,22,30,.9);color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;opacity:0;transition:.25s;z-index:12;pointer-events:none}
 .hp-toast.on{opacity:1;transform:translate(-50%,0)}
 .hp-move{position:absolute;right:24px;top:24px;display:flex;align-items:center;gap:10px;background:rgba(20,22,30,.92);color:#fff;padding:10px 12px 10px 18px;border-radius:12px;font-size:15px;z-index:13;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.hp-scr{position:fixed;inset:0;z-index:40000;display:flex;align-items:center;justify-content:center;background:rgba(8,10,16,.72);font-family:'Noto Sans KR','Malgun Gothic',sans-serif;color:#e9ecf3}
+.hp-scr-box{max-width:92vw;max-height:92vh;overflow:auto;background:#1b1e29;border:1px solid #2f3445;border-radius:16px;padding:24px 28px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.hp-scr-box h3{margin:0 0 6px;font-size:20px}.hp-scr-box p{margin:0 0 20px;font-size:14px;color:#aab1c4}
+.hp-scr-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;gap:22px}
+.hp-scr-item{display:flex;flex-direction:column;align-items:center;gap:0;background:transparent;border:2px solid transparent;border-radius:12px;padding:12px;color:inherit;font:inherit;cursor:pointer}
+.hp-scr-item:hover{background:rgba(255,255,255,.06)}.hp-scr-item.on{border-color:#4dabf7;background:rgba(77,171,247,.1)}
+.hp-scr-mon{position:relative;display:flex;align-items:center;justify-content:center;min-width:56px;min-height:40px;background:linear-gradient(145deg,#2b3350,#161a28);border:4px solid #0b0d14;outline:1px solid #454c63;border-radius:6px}
+.hp-scr-item:hover .hp-scr-mon,.hp-scr-item.on .hp-scr-mon{background:linear-gradient(145deg,#2f6fb0,#1a3a66)}
+.hp-scr-mon b{font-size:34px;font-weight:700;color:#fff;opacity:.9}
+.hp-scr-tags i.on{background:#4dabf7;color:#fff}
+.hp-scr-stand{width:46px;height:12px;margin-bottom:10px;background:#454c63;clip-path:polygon(34% 0,66% 0,66% 60%,100% 60%,100% 100%,0 100%,0 60%,34% 60%)}
+.hp-scr-name{font-size:14px;font-weight:600;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp-scr-res{font-size:13px;color:#aab1c4;margin-top:2px}
+.hp-scr-tags{display:flex;gap:4px;margin-top:6px;min-height:20px}.hp-scr-tags i{font-style:normal;font-size:11px;background:rgba(255,255,255,.1);border-radius:99px;padding:2px 8px;color:#cfd5e4}
+.hp-scr-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
+.hp-scr-foot button{font:inherit;font-size:14px;border:1px solid #3a4054;border-radius:8px;padding:8px 14px;background:transparent;color:#e9ecf3;cursor:pointer}
+.hp-scr-foot button:hover{background:rgba(255,255,255,.08)}.hp-scr-foot button.on{border-color:#4dabf7;color:#8ecbff}
 .hp-move[hidden]{display:none}.hp-move button{font:inherit;border:0;border-radius:8px;padding:8px 14px;background:#4dabf7;color:#fff;cursor:pointer}.hp-move button[data-x]{background:transparent;padding:8px}
 .hp-viewport.hp-zooming{transition:transform .35s cubic-bezier(.3,.7,.3,1)}
 .hp-zoom-armed .hp-viewport,.hp-zoom-armed .hp-viewport *{cursor:zoom-in!important}.hp-zoomed .hp-viewport,.hp-zoomed .hp-viewport *{cursor:zoom-out!important}
@@ -3654,5 +3774,5 @@ html,body{margin:0;height:100%;background:#12141c;color:#e9ecf3;font-family:'Not
     doc.head.appendChild(st);
   }
 
-  return { glowFilter, hooks, setLive3d, elSig, tokenizeCode, matchTokens, CODE_LANGS, ANIMS, ANIM_CATS, TRANSITIONS, SHAPES, BG_FX, BG_FX_CATS, BG_FX_COLORS, BG_FX_RETIRED, ACTIONS, HOVERS, CHART_TYPES, CHART_PALETTE, renderChart, animateChart, countUp, DRAW_FX, DRAW_DIRS, pathD, pathSegs, samplePath, bez, animateVisibleCharts, renderSlide, renderElement, buildGroups, applyState, playGroup, previewAll, playTransition, Presenter, CSS, injectCSS, parseEmbed, embedSrc, esc, csvRows };
+  return { glowFilter, hooks, setLive3d, elSig, tokenizeCode, matchTokens, CODE_LANGS, ANIMS, ANIM_CATS, TRANSITIONS, SHAPES, BG_FX, BG_FX_CATS, BG_FX_COLORS, BG_FX_RETIRED, ACTIONS, HOVERS, CHART_TYPES, CHART_PALETTE, renderChart, animateChart, countUp, DRAW_FX, DRAW_DIRS, pathD, pathSegs, samplePath, bez, animateVisibleCharts, renderSlide, renderElement, buildGroups, applyState, playGroup, previewAll, playTransition, Presenter, pickShowScreen, CSS, injectCSS, parseEmbed, embedSrc, esc, csvRows };
 }
