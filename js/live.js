@@ -113,7 +113,13 @@ const Live = (() => {
   };
 
   function apply(deck, rev, source, initial, msg) {
-    if (Editor.editing || document.querySelector('.modal-bg')) { L.deferred = true; return; }
+    // 글자를 선택만 해 둔 상태(고친 것 없음)면 편집을 끝내고 바로 반영한다. 입력 중인 글이 있을 때만 미룬다.
+    if (Editor.editing && !Editor.editDirty()) Editor.commitEdit();
+    if (Editor.editing || document.querySelector('.modal-bg')) {
+      if (!L.deferred && Editor.editing) UI.toast('🤖 Claude 가 바꾼 내용이 있습니다 — 글자 편집을 마치면(Esc) 반영됩니다');
+      L.deferred = true;
+      return;
+    }
     L.deferred = false;
     deck.theme = deck.theme || { id: 'classic' };
     (deck.slides || []).forEach((s) => { s.elements = s.elements || []; s.anims = s.anims || []; s.bg = s.bg || { type: 'color', color: '#ffffff' }; s.transition = s.transition || { type: 'none', duration: 700 }; });

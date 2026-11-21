@@ -864,6 +864,15 @@ const Editor = (() => {
     E.render();
   };
 
+  // 글자 편집 중에 아직 저장되지 않은 수정이 있는가 (글자만 선택해 둔 상태면 false)
+  E.editDirty = function () {
+    if (!E.editing) return false;
+    if (E.cell) return true;
+    const d = domFor(E.editing), el = Store.el(E.editing);
+    const tc = d && d.querySelector('.hp-tc');
+    return !tc || !el || cleanHtml(tc.innerHTML) !== el.html;
+  };
+
   function cleanHtml(h) {
     return h.replace(/\s*<br>\s*$/, '').replace(/\n/g, '');
   }
