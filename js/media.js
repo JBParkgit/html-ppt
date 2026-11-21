@@ -96,6 +96,18 @@ const Media = (() => {
     return put(blob);
   }
 
+  // 이 브라우저(없으면 서버 백업)에 있는 파일. 없으면 null
+  function blobOf(id) {
+    return getBlob(id).catch(() => null).then((b) => b || fromServer(id));
+  }
+
+  // 정해진 id 로 넣는다 — 발표 폴더(media/)에 저장해 둔 파일을 같은 "idb:<id>" 참조로 되살릴 때
+  async function putAs(id, blob) {
+    await tx('readwrite', (s) => s.put(blob, id));
+    if (!urls.has(id)) urls.set(id, URL.createObjectURL(blob));
+    pending.delete(id);
+  }
+
   async function clearUnused(usedSrcs) {
     const used = new Set(usedSrcs.filter((s) => s && s.startsWith('idb:')).map((s) => s.slice(4)));
     const keys = await tx('readonly', (s) => s.getAllKeys());
@@ -104,5 +116,5 @@ const Media = (() => {
     return del.length;
   }
 
-  return { put, resolve, preload, toDataURL, fromDataURL, getBlob, blobToDataURL, clearUnused, set onLoaded(fn) { onLoaded = fn; } };
+  return { put, resolve, preload, toDataURL, fromDataURL, getBlob, blobOf, putAs, blobToDataURL, clearUnused, set onLoaded(fn) { onLoaded = fn; } };
 })();

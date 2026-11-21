@@ -52,14 +52,32 @@ const IO = (() => {
     UI.toast('프로젝트 파일을 저장했습니다');
   }
 
-  async function openProject(file) {
+  // opts.url: 발표 파일의 주소(/decks/<폴더>/<파일>). 미디어를 그 폴더의 media/ 에 따로 둔 발표를 열 때 필요하다.
+  async function openProject(file, opts) {
     let data;
     try { data = JSON.parse(await file.text()); } catch (e) { UI.toast('파일을 읽을 수 없습니다', 'error'); return; }
     const deck = data.deck || data;
     if (!deck || !Array.isArray(deck.slides)) { UI.toast('올바른 프레젠테이션 파일이 아닙니다', 'error'); return; }
     const map = new Map();
     const media = data.media || {};
-    for (const [old, url] of Object.entries(media)) { if (url) map.set(old, await Media.fromDataURL(url)); }
+    const url = (opts && opts.url) || '';
+    const base = url ? url.slice(0, url.lastIndexOf('/') + 1) : '';
+    const online = /^https?:$/.test(location.protocol);
+    let lost = 0;
+    for (const [old, val] of Object.entries(media)) {
+      if (!val || typeof val !== 'string') continue;
+      if (val.startsWith('data:')) { map.set(old, await Media.fromDataURL(val)); continue; }
+      // 발표 폴더의 media/<파일> 로 따로 저장된 미디어 (내 발표 ▸ 지금 발표 저장)
+      const isIdb = old.startsWith('idb:');
+      // 이 브라우저에 그대로 있거나(idb:), 원래 자리에 파일이 있으면(assets/…) 참조를 그대로 둔다
+      if (isIdb) { if (await Media.blobOf(old.slice(4))) continue; }
+      else if (!online) continue;
+      else { try { if ((await fetch(old, { method: 'HEAD', cache: 'no-store' })).ok) continue; } catch (e) { /* 아래에서 폴더의 사본을 쓴다 */ } }
+      let blob = null;
+      if (base) { try { const r = await fetch(base + val.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' }); if (r.ok) blob = await r.blob(); } catch (e) { /* 없음 */ } }
+      if (!blob) { lost++; continue; }
+      if (isIdb) await Media.putAs(old.slice(4), blob); else map.set(old, await Media.put(blob));
+    }
     // data URL 로 직접 들어있는 미디어도 IndexedDB 로 옮김
     const fix = async (src) => {
       if (!src) return src;
@@ -78,7 +96,8 @@ const IO = (() => {
     Panels.invalidateThumbs();
     Store.setDeck(deck);
     document.getElementById('doc-title').value = deck.title || '';
-    UI.toast('“' + (deck.title || file.name) + '” 을(를) 열었습니다');
+    if (lost) UI.toast(`“${deck.title || file.name}” 을(를) 열었지만 미디어 ${lost}개를 찾지 못했습니다 — 발표 파일과 같은 폴더의 media 폴더가 있어야 합니다 (📚 내 발표에서 여세요)`, 'warn');
+    else UI.toast('“' + (deck.title || file.name) + '” 을(를) 열었습니다');
   }
 
   async function exportHTML() {

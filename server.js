@@ -11,7 +11,9 @@
  *      POST /api/selection        { source, slideId, slide, ids, text }   (편집기가 선택이 바뀔 때 보냄, 메모리에만 보관)
  *      GET  /api/decks            { files: [{ path, size, mtime }] }  decks 폴더의 덱 파일 목록 (파일 ▸ 열기, 내 발표)
  *      PUT  /api/decks/file?path=<decks 안 경로>[&overwrite=1]  (JSON 본문)  발표 파일 저장 — 내 발표 ▸ 지금 발표 저장 (이미 있으면 409)
- *      DELETE /api/decks/file?path=<decks 안 경로>             발표 파일 삭제 — 내 발표 ▸ 완전히 삭제
+ *      DELETE /api/decks/file?path=<decks 안 경로>             발표 파일 삭제 — 내 발표 ▸ 완전히 삭제 (그 발표만 쓰던 media/ 파일도 함께)
+ *      GET  /api/decks/media?dir=<발표 폴더>                  { files: [{ name, size }] }  그 발표 폴더의 media/ 안 파일
+ *      PUT  /api/decks/media?dir=<발표 폴더>&name=<파일 이름>  (파일 내용) → decks/<발표 폴더>/media/<파일 이름>
  *      GET/PUT /api/library       { folders, items }   내 발표의 별표·모음·휴지통 정보 (decks/library.json)
  *      GET  /api/media            { ids: [...] }       편집기가 브라우저(IndexedDB)에 넣은 미디어의 백업 목록
  *      PUT  /api/media/<id>       (파일 내용)            → decks/media/<id>.<확장자> 로 백업
@@ -37,12 +39,47 @@ function mediaFile(id) {
   try { const f = fs.readdirSync(MEDIA_DIR).find((n) => n.slice(0, n.lastIndexOf('.')) === id); return f ? path.join(MEDIA_DIR, f) : null; } catch (e) { return null; }
 }
 
+// 발표 폴더의 media/ 에 둘 수 있는 파일 (내 발표 ▸ 지금 발표 저장)
+const DECK_MEDIA_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif', '.mp4', '.webm', '.mov', '.m4v', '.mp3', '.wav', '.m4a', '.ogg', '.glb', '.gltf', '.bin']);
+// 발표 파일이 자기 폴더의 media/ 에서 쓰는 파일 이름들. 읽을 수 없는 파일이면 null
+function ownedMedia(text) {
+  try {
+    const m = JSON.parse(text).media;
+    if (!m || typeof m !== 'object') return [];
+    return Object.values(m).filter((v) => typeof v === 'string' && /^media\/[^\/\\]+$/.test(v)).map((v) => v.slice(6));
+  } catch (e) { return null; }
+}
+// names 가운데 같은 폴더의 다른 발표 파일(사본·백업)이 쓰지 않는 것만 지운다. 비게 된 폴더도 정리한다.
+function pruneMedia(dir, names) {
+  const mdir = path.join(dir, 'media');
+  if (dir === DECK_DIR || mdir === MEDIA_DIR) return 0;
+  let removed = 0;
+  if (names && names.length) {
+    const keep = new Set();
+    let jsons = [];
+    try { jsons = fs.readdirSync(dir).filter((n) => /\.json$/i.test(n)); } catch (e) { return 0; }
+    for (const n of jsons) {
+      let own = null;
+      try { own = ownedMedia(fs.readFileSync(path.join(dir, n), 'utf8')); } catch (e) { /* 아래에서 중단 */ }
+      if (!own) return 0; // 읽지 못한 발표 파일이 있으면 아무것도 지우지 않는다
+      own.forEach((x) => keep.add(x));
+    }
+    for (const name of new Set(names)) {
+      if (keep.has(name) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) continue;
+      try { fs.unlinkSync(path.join(mdir, name)); removed++; } catch (e) { /* 이미 없음 */ }
+    }
+  }
+  try { fs.rmdirSync(mdir); } catch (e) { /* 비어 있지 않음 */ }
+  try { fs.rmdirSync(dir); } catch (e) { /* 비어 있지 않음 */ }
+  return removed;
+}
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.avif': 'image/avif', '.ico': 'image/x-icon',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m4v': 'video/mp4', '.ogg': 'video/ogg',
-  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
 };
 
 let state = { rev: 0, source: '', deck: null, cmdSeq: 0, cmd: null, updatedAt: null, selection: null, editorSeenAt: 0 };
@@ -174,7 +211,7 @@ async function api(req, res, url) {
       for (const d of ents) {
         if (d.name.startsWith('.')) continue;
         const full = path.join(dir, d.name);
-        if (d.isDirectory()) { if (depth < 3 && full !== MEDIA_DIR && d.name !== 'renders') walk(full, depth + 1); continue; }
+        if (d.isDirectory()) { if (depth < 3 && d.name !== 'media' && d.name !== 'renders') walk(full, depth + 1); continue; }
         if (!/\.json$/i.test(d.name) || d.name.endsWith('.tmp')) continue;
         if (depth === 0 && d.name === 'library.json') continue; // 내 발표의 정리 정보는 발표 파일이 아니다
         try { const st = fs.statSync(full); files.push({ path: path.relative(DECK_DIR, full).split(path.sep).join('/'), size: st.size, mtime: st.mtimeMs }); } catch (e) { /* 무시 */ }
@@ -209,19 +246,49 @@ async function api(req, res, url) {
     if (!inside || !/\.json$/i.test(rel) || ['live.hppt.json', 'library.json'].includes(rel) || file.startsWith(MEDIA_DIR + path.sep)) return send(res, 400, { error: '쓸 수 없는 경로입니다: ' + rel });
     if (req.method === 'DELETE') {
       if (!fs.existsSync(file)) return send(res, 404, { error: 'not found' });
+      let own = null;
+      try { own = ownedMedia(fs.readFileSync(file, 'utf8')); } catch (e) { /* 미디어는 그대로 둔다 */ }
       fs.unlinkSync(file);
-      console.log(`[library] delete decks/${rel}`);
-      return send(res, 200, { ok: true });
+      const removed = pruneMedia(path.dirname(file), own || []);
+      console.log(`[library] delete decks/${rel}${removed ? ` (+ media ${removed})` : ''}`);
+      return send(res, 200, { ok: true, mediaRemoved: removed });
     }
     let text;
     try { text = await readBody(req, 1024 * 1024 * 1024); } catch (e) { return send(res, 413, { error: 'too large' }); }
     try { const d = JSON.parse(text); if (!Array.isArray((d.deck || d).slides)) throw new Error('no slides'); } catch (e) { return send(res, 400, { error: '발표 파일 형식이 아닙니다' }); }
     if (fs.existsSync(file) && !url.searchParams.has('overwrite')) return send(res, 409, { error: '이미 있는 파일입니다: ' + rel });
+    let before = null;
+    try { before = ownedMedia(fs.readFileSync(file, 'utf8')); } catch (e) { /* 새 파일 */ }
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file + '.tmp', text);
     fs.renameSync(file + '.tmp', file);
-    console.log(`[library] save decks/${rel} (${Math.round(text.length / 1024)} KB)`);
-    return send(res, 200, { ok: true, path: rel });
+    // 덮어쓰면서 더는 쓰지 않게 된 미디어를 정리한다
+    const removed = before && before.length ? pruneMedia(path.dirname(file), before) : 0;
+    console.log(`[library] save decks/${rel} (${Math.round(text.length / 1024)} KB)${removed ? ` (- media ${removed})` : ''}`);
+    return send(res, 200, { ok: true, path: rel, mediaRemoved: removed });
+  }
+  if (p === '/api/decks/media' && (req.method === 'GET' || req.method === 'PUT')) {
+    // 발표 폴더(decks/<폴더>)의 media/ — 그 발표가 쓰는 이미지·영상·소리를 발표 파일 옆에 둔다
+    const rel = String(url.searchParams.get('dir') || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    const dir = path.normalize(path.join(DECK_DIR, rel));
+    const mdir = path.join(dir, 'media');
+    const ok = rel && dir.startsWith(DECK_DIR + path.sep) && !rel.split('/').some((s) => !s || s.startsWith('.')) && mdir !== MEDIA_DIR && !dir.startsWith(MEDIA_DIR + path.sep) && dir !== MEDIA_DIR;
+    if (!ok) return send(res, 400, { error: '쓸 수 없는 폴더입니다: ' + rel });
+    if (req.method === 'GET') {
+      const files = [];
+      try { for (const n of fs.readdirSync(mdir)) { if (n.endsWith('.tmp')) continue; const st = fs.statSync(path.join(mdir, n)); if (st.isFile()) files.push({ name: n, size: st.size }); } } catch (e) { /* 아직 없음 */ }
+      return send(res, 200, { files });
+    }
+    const name = String(url.searchParams.get('name') || '');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/.test(name) || !DECK_MEDIA_EXT.has(path.extname(name).toLowerCase())) return send(res, 400, { error: '쓸 수 없는 파일 이름입니다: ' + name });
+    let buf;
+    try { buf = await readRaw(req, 1024 * 1024 * 1024); } catch (e) { return send(res, 413, { error: 'too large' }); }
+    fs.mkdirSync(mdir, { recursive: true });
+    const file = path.join(mdir, name);
+    fs.writeFileSync(file + '.tmp', buf);
+    fs.renameSync(file + '.tmp', file);
+    console.log(`[library] media decks/${rel}/media/${name} (${Math.round(buf.length / 1024)} KB)`);
+    return send(res, 200, { ok: true, name, size: buf.length });
   }
   if (p === '/api/media' && req.method === 'GET') {
     let ids = [];

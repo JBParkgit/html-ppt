@@ -338,11 +338,12 @@ const App = (() => {
     let close;
     const open = async (f) => {
       try {
-        const r = await fetch('/decks/' + f.path.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' });
+        const url = '/decks/' + f.path.split('/').map(encodeURIComponent).join('/');
+        const r = await fetch(url, { cache: 'no-store' });
         if (!r.ok) throw new Error(r.status);
         const name = f.path.slice(f.path.lastIndexOf('/') + 1);
         close();
-        await IO.openProject(new File([await r.blob()], name, { type: 'application/json' }));
+        await IO.openProject(new File([await r.blob()], name, { type: 'application/json' }), { url });
       } catch (e) { UI.toast('파일을 열 수 없습니다: ' + f.path, 'error'); }
     };
     const filter = h('input', { type: 'search', class: 'deck-open-filter', placeholder: '🔍 폴더·파일 이름으로 찾기' });

@@ -2,6 +2,7 @@
  *  📚 내 발표 버튼(Ctrl+Shift+O). 미리보기 카드로 보고, 검색·정렬·격자/목록 전환, 크게 보기, 열기,
  *  별표·모음(가상 폴더)·휴지통으로 정리한다. "지금 발표 저장"은 decks/<날짜>_<제목>/<제목>.hppt.json 으로 저장한다.
  *  - 로컬 서버(start.bat)로 실행했을 때만 쓸 수 있다 (파일 목록·저장은 server.js 가 한다).
+ *  - 발표에 든 이미지·영상·소리는 같은 폴더의 media/ 에 파일로 따로 저장한다 (발표 폴더만 옮겨도 그대로 열린다).
  *  - 별표·모음·휴지통 정보는 발표 파일을 건드리지 않고 decks/library.json 에 따로 둔다.
  *    휴지통에 넣는 것은 목록에서 숨기는 것이고, "완전히 삭제"를 해야 디스크의 파일이 지워진다. */
 const Library = (() => {
@@ -54,7 +55,8 @@ const Library = (() => {
           const deck = data.deck || data;
           if (!deck || !Array.isArray(deck.slides) || !deck.slides.length) throw new Error('발표 파일이 아닙니다');
           const media = data.media || {};
-          resolve({ deck, resolve: (src) => (src && media[src]) || Media.resolve(src) });
+          // media 표의 값: 파일 안에 든 data URL(예전 방식) 또는 발표 폴더 기준 경로(media/<파일>)
+          resolve({ deck, resolve: (src) => { const m = src && media[src]; return !m ? Media.resolve(src) : /^data:/.test(m) ? m : fileUrl((dirName(f.path) ? dirName(f.path) + '/' : '') + m); } });
         } catch (e) { reject(e); }
       });
       pump();
@@ -74,10 +76,55 @@ const Library = (() => {
   }
 
   /* ---------- 지금 발표를 저장 ---------- */
-  async function currentData() {
-    const media = {};
-    for (const src of new Set(Store.allMediaSrcs())) { if (src.startsWith('idb:')) media[src] = await Media.toDataURL(src); }
-    return { format: 'html-presentation-studio', version: 1, savedAt: new Date().toISOString(), deck: Store.deck, media };
+  // 미디어(이미지·영상·소리·3D)는 발표 폴더의 media/ 에 파일로 따로 두고, 발표 파일에는 { 원래 참조: 'media/<파일>' } 표만 적는다.
+  //  - idb:<id>  → media/<id>.<확장자>      - assets/<파일> → media/<파일>
+  //  - 이미 같은 파일이 있으면 다시 올리지 않는다. music/ 내장 곡과 웹 주소는 그대로 둔다.
+  //  - decks 바로 아래에 저장하는 파일(폴더 없음)만 예전처럼 파일 안에 넣는다.
+  const EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/avif': '.avif', 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/mp4': '.m4a', 'audio/ogg': '.ogg', 'model/gltf-binary': '.glb', 'model/gltf+json': '.gltf' };
+  async function currentData(path) {
+    const dir = dirName(path), media = {}, out = { saved: 0, missing: 0 };
+    const srcs = [...new Set(Store.allMediaSrcs())];
+    if (!dir) {
+      for (const src of srcs) { if (src.startsWith('idb:')) media[src] = await Media.toDataURL(src); }
+      out.data = { format: 'html-presentation-studio', version: 1, savedAt: new Date().toISOString(), deck: Store.deck, media };
+      return out;
+    }
+    const q = '/api/decks/media?dir=' + encodeURIComponent(dir);
+    const have = new Map((await api(q)).files.map((x) => [x.name, x.size]));
+    const used = new Set();
+    const upload = async (name, blob) => { await api(q + '&name=' + encodeURIComponent(name), { method: 'PUT', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob }); have.set(name, blob.size); };
+    for (const src of srcs) {
+      try {
+        if (src.startsWith('idb:')) {
+          const id = src.slice(4);
+          let name = [...have.keys()].find((n) => n.slice(0, n.lastIndexOf('.')) === id);
+          if (!name) {
+            const blob = await Media.blobOf(id);
+            if (!blob) { out.missing++; continue; }
+            name = id + (EXT[String(blob.type || '').split(';')[0].trim().toLowerCase()] || '.bin');
+            await upload(name, blob);
+          }
+          media[src] = 'media/' + name;
+          out.saved++;
+        } else if (/^assets\//.test(src)) {
+          const r = await fetch(src, { cache: 'no-store' });
+          if (!r.ok) { out.missing++; continue; }
+          const blob = await r.blob();
+          const raw = src.slice(src.lastIndexOf('/') + 1).split(/[?#]/)[0], dot = raw.lastIndexOf('.');
+          const stem = (dot > 0 ? raw.slice(0, dot) : raw).replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+/, '').slice(0, 80) || 'file';
+          const ext = dot > 0 ? raw.slice(dot).toLowerCase() : '.bin';
+          // 이름이 같은데 내용(크기)이 다른 파일이 이미 있으면 -2, -3 … 을 붙인다
+          let name = stem + ext;
+          for (let n = 2; used.has(name) || (have.has(name) && have.get(name) !== blob.size); n++) name = `${stem}-${n}${ext}`;
+          if (!have.has(name)) await upload(name, blob);
+          used.add(name);
+          media[src] = 'media/' + name;
+          out.saved++;
+        }
+      } catch (e) { out.missing++; }
+    }
+    out.data = { format: 'html-presentation-studio', version: 2, savedAt: new Date().toISOString(), deck: Store.deck, media };
+    return out;
   }
   const putFile = (path, text, overwrite) => api('/api/decks/file?path=' + encodeURIComponent(path) + (overwrite ? '&overwrite=1' : ''), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text });
   const linked = () => { try { return localStorage.getItem('hppt.libPath') || ''; } catch (e) { return ''; } };
@@ -105,10 +152,12 @@ const Library = (() => {
     if (!path) path = await freshPath(Store.deck.title, taken);
     UI.toast('내 발표에 저장하는 중…');
     try {
-      await putFile(path, JSON.stringify(await currentData()), overwrite);
+      const cur = await currentData(path);
+      await putFile(path, JSON.stringify(cur.data), overwrite);
       setLinked(path);
       cache.delete(path);
-      UI.toast(`내 발표에 저장했습니다 — decks/${path}`);
+      if (cur.missing) UI.toast(`내 발표에 저장했지만 미디어 ${cur.missing}개는 찾지 못해 폴더에 넣지 못했습니다 — decks/${path}`, 'warn');
+      else UI.toast(`내 발표에 저장했습니다 — decks/${path}${cur.saved && dirName(path) ? ` (미디어 ${cur.saved}개는 같은 폴더의 media 에)` : ''}`);
       return path;
     } catch (e) { UI.toast('저장하지 못했습니다: ' + e.message, 'error'); return null; }
   };
@@ -165,7 +214,7 @@ const Library = (() => {
         const r = await fetch(fileUrl(f.path), { cache: 'no-store' });
         if (!r.ok) throw new Error(r.status);
         close();
-        await IO.openProject(new File([await r.blob()], baseName(f.path) + '.hppt.json', { type: 'application/json' }));
+        await IO.openProject(new File([await r.blob()], baseName(f.path) + '.hppt.json', { type: 'application/json' }), { url: fileUrl(f.path) });
         setLinked(f.path);
       } catch (e) { UI.toast('파일을 열 수 없습니다: decks/' + f.path, 'error'); }
     };
@@ -174,7 +223,7 @@ const Library = (() => {
     const trash = async (paths) => { await setMeta(paths, { trashedAt: Date.now() }); picked.clear(); UI.toast(`휴지통으로 옮겼습니다 (${paths.length}개) — 파일은 그대로 있고, 휴지통에서 되살릴 수 있습니다`); draw(); };
     const restore = async (paths) => { await setMeta(paths, { trashedAt: null }); picked.clear(); UI.toast('되살렸습니다'); draw(); };
     const destroy = async (paths) => {
-      if (!window.confirm(`발표 파일 ${paths.length}개를 디스크에서 완전히 삭제할까요?\n\n${paths.slice(0, 6).map((p) => 'decks/' + p).join('\n')}${paths.length > 6 ? '\n…' : ''}\n\n되돌릴 수 없습니다.`)) return;
+      if (!window.confirm(`발표 파일 ${paths.length}개를 디스크에서 완전히 삭제할까요?\n\n${paths.slice(0, 6).map((p) => 'decks/' + p).join('\n')}${paths.length > 6 ? '\n…' : ''}\n\n그 발표만 쓰던 media 폴더의 파일도 함께 지워집니다. 되돌릴 수 없습니다.`)) return;
       for (const p of paths) {
         await api('/api/decks/file?path=' + encodeURIComponent(p), { method: 'DELETE' });
         delete lib.items[p]; cache.delete(p);
